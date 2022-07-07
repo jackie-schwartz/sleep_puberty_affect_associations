@@ -1,0 +1,358 @@
+---
+title: "3_ema_MLM_affectoutcome"
+author: "Jackie"
+date: "5/9/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+> This script analyzes adolescents only in grade school (before transition to college)
+
+
+# Libraries
+
+```{r, message=FALSE,warning=FALSE,echo=FALSE}
+library(tidyverse)
+library(modelr)
+library(chron)
+library(hms)
+library(lubridate)
+library(bootnet)
+library(EMAtools)
+library(lme4)
+library(sjPlot)
+library(sjstats)
+library(assertthat)
+library(effectsize)
+library(tidyverse)
+library(dplyr)
+library(naniar)
+library(data.table)
+library(entropy)
+library(psych)
+```
+
+## functions
+```{r}
+getmode <- function(v, na.rm=TRUE) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+# function from ben bolker
+mylag <- function(x,lag) {
+  c(rep(NA,lag),head(x,-lag))
+}
+```
+
+# Read in data
+
+
+```{r, message=FALSE}
+emadffp <- "~/Dropbox/JSK_SC/_scripts/4_aim2/ema_and_act_merge.csv"
+emadf <- read_csv(emadffp) %>%
+  dplyr::filter(high_school == "1") %>%
+  dplyr::select(
+    ELS_ID, sex, triggerdate, dayorder, respnumber, trigger_tod, trigger_tod_order, wday, week, tanner_average_ahc,
+    DailySleep_satisfaction:pos_total, emo_rr, sleep_rr, act_rr, Afternoon:COVID, device_OS
+    ) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID),
+    sex = factor(sex)
+    )
+
+emadf %>% distinct(ELS_ID)  
+
+```
+
+### filter out if less than 3 prompts of evening/afternoon/morning
+
+```{r}
+emadf_filt <-
+  emadf %>%
+  dplyr::group_by(ELS_ID, trigger_tod) %>%
+  dplyr::summarise(n = n()) %>%
+  dplyr::mutate(
+    toofew = ifelse(n < 3, "drop", "keep")
+  )
+
+emadf_filt %>%
+  ggplot(
+    aes(x = n, fill = trigger_tod)
+  ) +
+  facet_wrap(~trigger_tod) +
+  geom_histogram(stat = "count")
+
+emadf_filt_merge <-
+  emadf_filt %>%
+  dplyr::select(-trigger_tod, -n) %>%
+  distinct() # 201 and 206 not enough data
+  
+```
+
+```{r}
+merge_restruct <-
+  emadf %>% 
+  filter(ELS_ID != "201") %>%
+  filter(ELS_ID != "206") %>%
+  ungroup() %>%
+  dplyr::mutate(
+    sex = factor(sex),
+    COVID = factor(COVID),
+    dayorder_f = factor(dayorder),
+    tod_f = factor(trigger_tod_order)
+  ) %>%
+  dplyr::group_by(sex) %>%
+  dplyr::mutate(
+    tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)),
+    Age_ahc_z = as.numeric(scale(Age_ahc)),
+    BMI_ahc_z = as.numeric(scale(BMI_ahc))
+  )
+```
+
+
+```{r}
+merge_restruct <- merge_restruct[order(merge_restruct$ELS_ID), ]
+
+```
+
+# Centering
+
+Level 1 variable centering
+- computing deviations from the person's mean of that variable (x - mean(x)) for that person
+Level 2 variable centering
+- the person's mean (mean(x))
+
+### First, we split our predictor variables into time-varying and time-invariant components
+
+```{r}
+library(plyr)
+library(dplyr)
+library(reshape2)
+# daily sleep satisfaction
+day.means_DailySleep_sat <- ddply(merge_restruct, "ELS_ID", summarize, DailySleep_sat.L2 =mean(DailySleep_satisfaction, na.rm=TRUE))
+# daily sleep hours
+day.means_DailySleep_hrs <- ddply(merge_restruct, "ELS_ID", summarize, DailySleep_hrs.L2 =mean(DailySleep_hrs_rec, na.rm=TRUE))
+# efficiency
+day.means_efficiency <- ddply(merge_restruct, "ELS_ID", summarize, efficiency.L2 =mean(efficiency, na.rm=TRUE))
+# sleep hours
+day.means_sleephrs <- ddply(merge_restruct, "ELS_ID", summarize, sleep_time.L2 =mean(sleep_time_hrs, na.rm=TRUE))
+# neg_total
+day.means_negtotal <- ddply(merge_restruct, "ELS_ID", summarize, NA.L2 =mean(neg_total, na.rm=TRUE))
+# neg_total_sqrt
+day.means_negtotal_sqrt <- ddply(merge_restruct, "ELS_ID", summarize, NAsqrt.L2 =mean(neg_total_sqrt, na.rm=TRUE))
+# pos_total
+day.means_postotal <- ddply(merge_restruct, "ELS_ID", summarize, PA.L2 =mean(pos_total, na.rm=TRUE))
+
+#Calculating sample-centered versions *Note that this is done in a person-level data file.
+day.means_DailySleep_sat$DailySleep_sat.L2.c <- as.numeric(scale(day.means_DailySleep_sat$DailySleep_sat.L2,center=TRUE,scale=FALSE))
+day.means_DailySleep_hrs$DailySleep_hrs.L2.c <- as.numeric(scale(day.means_DailySleep_hrs$DailySleep_hrs.L2,center=TRUE,scale=FALSE))
+day.means_efficiency$efficiency.L2.c <- as.numeric(scale(day.means_efficiency$efficiency.L2,center=TRUE,scale=FALSE))
+day.means_sleephrs$sleep_time.L2.c <- as.numeric(scale(day.means_sleephrs$sleep_time.L2,center=TRUE,scale=FALSE))
+day.means_negtotal$NA.L2.c <- as.numeric(scale(day.means_negtotal$NA.L2,center=TRUE,scale=FALSE))
+day.means_negtotal_sqrt$NAsqrt.L2.c <- as.numeric(scale(day.means_negtotal_sqrt$NAsqrt.L2,center=TRUE,scale=FALSE))
+day.means_postotal$PA.L2.c <- as.numeric(scale(day.means_postotal$PA.L2,center=TRUE,scale=FALSE))
+
+#merging "trait" scores back into the *long* data file and calculate "state" scores.
+day.means2 <- merge(
+  merge_restruct,
+  day.means_DailySleep_sat,
+  by="ELS_ID"
+  )
+day.means3 <- merge(
+  day.means2,
+  day.means_DailySleep_hrs,
+  by="ELS_ID"
+  )
+day.means4 <- merge(
+  day.means3,
+  day.means_efficiency,
+  by="ELS_ID"
+  )
+day.means5 <- merge(
+  day.means4,
+  day.means_sleephrs,
+  by="ELS_ID"
+  )
+day.means6 <- merge(
+  day.means5,
+  day.means_negtotal,
+  by="ELS_ID"
+  )
+day.means7 <- merge(
+  day.means6,
+  day.means_negtotal_sqrt,
+  by="ELS_ID"
+  )
+day.means8 <- merge(
+  day.means7,
+  day.means_postotal,
+  by="ELS_ID"
+  )
+
+
+
+# creating level 1 variables
+day.means8$DailySleep_sat.L1 <- day.means8$DailySleep_satisfaction - day.means8$DailySleep_sat.L2
+day.means8$DailySleep_hrs.L1 <- day.means8$DailySleep_hrs_rec - day.means8$DailySleep_hrs.L2
+day.means8$efficiency.L1 <- day.means8$efficiency - day.means8$efficiency.L2
+day.means8$sleep_time.L1 <- day.means8$sleep_time_hrs - day.means8$sleep_time.L2
+day.means8$NA.L1 <- day.means8$neg_total - day.means8$NA.L2
+day.means8$NAsqrt.L1 <- day.means8$neg_total_sqrt - day.means8$NAsqrt.L2
+day.means8$PA.L1 <- day.means8$pos_total - day.means8$PA.L2
+
+
+# Centering time
+day.means9 <-
+  day.means8 %>%
+  mutate(
+    tod.c = scale(trigger_tod_order, center = TRUE, scale = FALSE),
+    dayorder.c = scale(dayorder, center = TRUE, scale = FALSE)
+  ) %>%
+  relocate(tod.c, .after = trigger_tod_order) %>%
+  relocate(dayorder.c, .after = dayorder)
+
+```
+
+
+# 3-level MLM to predict negative affect
+> L1 = time of day (trigger_tod_order)
+> L2 = sleep.state
+> L3 = sleep.trait
+> DV = NA
+> _i_ = time of day
+> _j_ = day
+> _k_ = person
+
+```{r,message=FALSE,echo=FALSE,warning=FALSE}
+library(sjPlot)
+library(lmerTest)
+library(performance)
+library(reghelper)
+library(parameters)
+library(MuMIn)
+library(interactions)
+```
+
+
+### L1
+\[NA_{ijk} = \beta_{0jk}+\beta_{1jk}TOD_{ijk}+\beta_{2jk}PA.State_{ijk}+e_{ijk}\]
+```{r}
+
+library(bruceR)
+mlm_l1_na_ri <-
+  lmer(
+    neg_total_sqrt ~ 1 + trigger_tod_order + (1 | ELS_ID), data = day.means9
+    )
+mlm_l1_pa_ri <-
+  lmer(
+    pos_total ~ trigger_tod_order + (1 | ELS_ID), data = day.means9
+    )
+
+
+mlm_l1_na_rs <-
+  lmer(
+    neg_total_sqrt ~  1 + trigger_tod_order + (1 | ELS_ID/dayorder), data = day.means9)  # too complex with trigger_tod_order as a random slope
+mlm_l1_pa_rs <-
+  lmer(
+    pos_total ~  1 + trigger_tod_order + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9
+    )
+
+# model comparison
+anova(mlm_l1_pa_ri, mlm_l1_pa_rs) # random slope better
+anova(mlm_l1_na_ri, mlm_l1_na_rs) # random slope better
+
+# summary
+HLM_summary(mlm_l1_na_rs)
+HLM_summary(mlm_l1_pa_rs)
+
+```
+
+> For NA, there is a marginal effect of day; no effect of time of day
+> For PA, there is no effect of day, but there is an effect of time of day (positive affect increases in the evening compared to the morning)
+
+### L2
+\[\beta_{0jk}=\gamma_{00k}+\gamma_{01k}DailySleep_{jk}+\gamma_{02k}Day_{jk} + r_{0jk}\]  
+\[\beta_{1jk}=\gamma_{10k}+\gamma_{11k}DailySleep_{jk}+\gamma_{12k}Day_{jk} +r_{1jk}\] 
+\[\beta_{2jk}=\gamma_{20k}+r_{2jk}\] 
+withindayslope (withinday affect trajecotry) = expectedvalue of withindayslope for person +sleep
+```{r}
+# sleep state is level 2
+
+mlm_l2_na_ri_subj_sleep <-
+  lmer(
+    neg_total_sqrt ~  1 + dayorder + DailySleep_sat.L1*trigger_tod_order + PA.L1*trigger_tod_order + (1 | ELS_ID/dayorder), data = day.means9
+    )
+mlm_l2_na_rs_subj_sleep <-
+    lmer(
+      neg_total_sqrt ~  1  + dayorder + DailySleep_sat.L1*trigger_tod_order + PA.L1*trigger_tod_order + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9
+    )
+anova(mlm_l2_na_ri_subj_sleep, mlm_l2_na_rs_subj_sleep) # random slope better
+HLM_summary(mlm_l2_na_rs_subj_sleep)
+
+
+mlm_l2_pa_ri_subj_sleep <-
+  lmer(
+    pos_total ~  1 + dayorder + DailySleep_sat.L1*trigger_tod_order + NAsqrt.L1*trigger_tod_order + (1 | ELS_ID/dayorder), data = day.means9
+    )
+mlm_l2_pa_rs_subj_sleep <-
+  lmer(
+    pos_total ~  1 + dayorder + DailySleep_sat.L1*trigger_tod_order + NAsqrt.L1*trigger_tod_order + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9
+    )
+anova(mlm_l2_pa_ri_subj_sleep, mlm_l2_pa_rs_subj_sleep) # random slope better
+
+HLM_summary(mlm_l2_pa_rs_subj_sleep)
+
+```
+
+
+### L3 (time-of-day * Daily Sleep Sat * puberty + Trait Sleep Sat * puberty)
+\[\gamma_{00k}=\pi_{000}+\pi_{001}Puberty_{k}+\pi_{002}SleepTrait_{k}+\pi_{003}SleepTrait_{k}*Puberty_{k}+\pi_{004}PA.Trait_{k}+\nu_{00k}\]
+\[\gamma_{10k}=\pi_{100}+\pi_{101}Puberty_{k}+\pi_{102}SleepTrait_{k}+\pi_{103}SleepTrait_{k}*Puberty_{k}+\nu_{10k}\]
+\[\gamma_{01k}=\pi_{010}+\pi_{011}Puberty_{k}+\pi_{012}SleepTrait_{k}+\pi_{013}SleepTrait_{k}*Puberty_{k}+\nu_{01k}\]
+\[\gamma_{02k}=\pi_{020}+\pi_{021}Puberty_{k}+\pi_{022}SleepTrait_{k}+\pi_{023}SleepTrait_{k}*Puberty_{k}+\nu_{02k}\]
+\[\gamma_{11k}=\pi_{110}+\pi_{111}Puberty_{k}+\pi_{112}SleepTrait_{k}+\pi_{113}SleepTrait_{k}*Puberty_{k}+\nu_{11k}\]
+\[\gamma_{12k}=\pi_{120}+\pi_{121}Puberty_{k}+\pi_{122}SleepTrait_{k}+\pi_{123}SleepTrait_{k}*Puberty_{k}+\nu_{12k}\]
+\[\gamma_{20k}=\pi_{200}+\nu_{20k}\]
+
+```{r}
+day.means9_red <-
+  day.means9 %>%
+  dplyr::select(
+    ELS_ID, dayorder, trigger_tod_order, tanner_average_ahc_z, neg_total_sqrt, pos_total, DailySleep_sat.L1, DailySleep_sat.L2.c, PA.L1, PA.L2.c, NAsqrt.L1, NAsqrt.L2.c
+  )
+# Neg Affect 
+mlm_l3_na_ri_subj_sleep_sat_pub <-
+  lmer(
+    neg_total_sqrt ~ dayorder + trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z  + DailySleep_sat.L2.c*tanner_average_ahc_z  + PA.L1 + PA.L2.c + (1  | ELS_ID/dayorder), data = day.means9_red
+    ) 
+mlm_l3_na_rs_subj_sleep_sat_pub <-
+  lmer(
+    neg_total_sqrt ~ dayorder + trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z + DailySleep_sat.L2.c*tanner_average_ahc_z + PA.L1 + PA.L2.c + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9_red
+    ) 
+
+anova(mlm_l3_na_ri_subj_sleep_sat_pub, mlm_l3_na_rs_subj_sleep_sat_pub)
+HLM_summary(mlm_l3_na_rs_subj_sleep_sat_pub)
+
+
+# Pos Affect
+mlm_l3_pa_ri_subj_sleep_sat_pub <-
+  lmer(
+    pos_total ~ dayorder + trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z + DailySleep_sat.L2.c*tanner_average_ahc_z + NAsqrt.L1 + NAsqrt.L2.c + (1  | ELS_ID/dayorder), data = day.means9_red
+    ) 
+mlm_l3_pa_rs_subj_sleep_sat_pub <-
+  lmer(
+    pos_total ~ dayorder + trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z + DailySleep_sat.L2.c*tanner_average_ahc_z + NAsqrt.L1 + NAsqrt.L2.c + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9_red
+    ) 
+
+anova(mlm_l3_pa_ri_subj_sleep_sat_pub, mlm_l3_pa_rs_subj_sleep_sat_pub)
+HLM_summary(mlm_l3_pa_rs_subj_sleep_sat_pub)
+
+library(sjPlot)
+library(sjstats)
+
+tab_model(mlm_l3_na_rs_subj_sleep_sat_pub, mlm_l3_pa_rs_subj_sleep_sat_pub, show.std = TRUE,  dv.labels = c("NA", "PA"), string.std_ci = "CI 95%", string.std.p = "p-value", col.order = c("std.est", "std.ci", "std.p"), pred.labels = c("Intercept", "day", "time-of-day", "DailySleepSat.State", "TannerStage", "DailySleepSat.Trait.c",  "PA.State", "PA.Trait", "DailySleepSat.State*time-of-day", "TannerStage*time-of-day", "DailySleepSat.State*TannerStage", "DailySleepSat.Trait.c*TannerStage", "DailySleepSat.State*TannerStage*time-of-day", "NA.State", "NA.Trait"), file = "affect_sleepsat_mod.doc")
+```
+

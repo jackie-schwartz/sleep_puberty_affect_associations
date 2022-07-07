@@ -1,0 +1,370 @@
+---
+title: "actigraphy"
+author: "Jackie"
+date: "03/25/22"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+This script wrangles actigraphy data for subsequent analyses
+
+# Loading libraries
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(foreign)
+library(haven)
+library(readxl)
+library(lubridate)
+library(lmerTest)
+library(psych)
+```
+
+# Read in data
+
+## Actigraphy sleep data
+
+> Reading in usable sleep data (>=3 days of data)
+
+```{r read act sleep, message=FALSE}
+sleep_act_usable_fp <- "~/Dropbox/JSK_SC/actigraphy/1_usable_actigraphy_data.csv"
+
+sleep_act_usable <-
+  read_csv(sleep_act_usable_fp) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(-c(analysis_name))
+```
+
+## Summary sheet
+
+```{r}
+sum_sheet <- "~/Dropbox/JSK_SC/curating_data/3_actigraphy_ema_data_summary.csv"
+sum_sheet_df <- 
+  read_csv(sum_sheet) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(ELS_ID, simiul_ahc_t3, simul_ahc_t4, starts_with("use")) %>%
+  mutate(
+   simul =
+      ifelse(simiul_ahc_t3 == "yes" | simul_ahc_t4 == "yes", "1", "0")
+  ) %>%
+  filter(simul == "1")
+
+```
+## MERGING
+```{r}
+sleep_act_usable2 <-
+  sleep_act_usable %>%
+  dplyr::mutate(
+    ELS_ID = as.character(ELS_ID),
+    ELS_ID = as.numeric(ELS_ID),
+    ELS_ID = as.factor(ELS_ID)
+  )
+  
+
+sleep_merge <-
+  dplyr::left_join(
+    sleep_act_usable2,
+    sum_sheet_df,
+    by = "ELS_ID"
+  )
+
+sleep_merge2 <-
+  sleep_merge %>%
+  filter(simul == "1")
+
+sleep_merge2 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    n = n()
+  )
+```
+
+### cleaning variable names
+
+> filter only for sleep intervals, and selecting only efficiency, duration, and sleep_time
+> filtering for valid sleep intervals
+
+```{r, cleaning}
+d_vars <- c("data_start_date", "efficiency","sleep_time")
+
+sleep_act_usable_clean <-
+  sleep_merge2 %>%
+  filter(interval_type == "SLEEP") %>%  
+  dplyr::select(
+    ELS_ID, 
+    Subject_ID_Timepoint,
+    act_timepoint,
+    use_actigraphy_date_t3,
+    use_actigraphy_date_t4,
+    interval_type,
+    interval_number,
+    data_start_date,
+    start_date, # night of administration
+    start_time,
+    end_date,
+    end_time,
+    efficiency,
+    sleep_time,
+    inv_time_sw
+    ) %>%
+  filter(
+    inv_time_sw == 0
+    ) %>%
+  mutate(
+    sleep_time_hrs = sleep_time/60
+  ) 
+
+
+### 171 was not a simultaneous person
+sleep_act_usable_clean2 <-
+  sleep_act_usable_clean %>%
+  mutate(
+    drop =
+      ifelse(
+        str_detect(Subject_ID_Timepoint, "196-T3"), # keeping 196x
+        "drop",
+        NA_real_
+      ),
+    drop = 
+      ifelse(
+        str_detect(Subject_ID_Timepoint, "085-T3") &
+          str_detect(data_start_date, "7/19/19"),
+        "drop",
+        drop
+      )
+    ) %>%
+  filter(
+    is.na(drop)
+  ) %>%
+  dplyr::select(-drop, -inv_time_sw) %>%
+  distinct()
+
+sleep_act_usable_clean2 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    n = n()
+  )
+```
+
+### parsing dates
+
+```{r parsing dates}
+sleep_act_usable_clean3 <-
+  sleep_act_usable_clean2 %>%
+  mutate(
+    act_trigger_date = mdy(start_date),
+    act_start_date = mdy(data_start_date),
+    act_end_date = mdy(end_date)
+  ) %>%
+  dplyr::select(-c(start_date, data_start_date, end_date, interval_type))
+```
+
+### creating day and week variables
+
+```{r}
+# creating day and week variables
+sleep_act_usable_clean4 <-
+  sleep_act_usable_clean3 %>%
+  dplyr::mutate(
+    day = day(act_trigger_date),
+    wday = lubridate::wday(act_trigger_date, label = TRUE),
+    ELS_ID = factor(ELS_ID)
+  ) 
+
+# day num
+sleep_act_usable_clean5  <-
+  sleep_act_usable_clean4 %>%
+  group_by(ELS_ID) %>% 
+  arrange(act_trigger_date, .by_group = TRUE) %>%
+  mutate(
+    respnumber = order(act_trigger_date)
+    )
+```
+
+### wkday or wkend
+
+```{r}
+sleep_act_usable_clean6 <-
+  sleep_act_usable_clean5 %>%
+  mutate(
+    week =
+      ifelse(
+        wday == "Sun" |
+          wday == "Sat",
+        "wkend",
+        "wkday"
+      )
+  ) %>%
+  relocate(respnumber, .after = interval_number) %>%
+  mutate(
+    match = interval_number == respnumber # everything matches
+  ) %>%
+  dplyr::select(-interval_number, -match)
+```
+
+## merging with  summary sheet
+```{r}
+
+sleep_act_usable_clean7 <-
+  sleep_act_usable_clean6 %>%
+  mutate(
+    use_actigraphy_date_t3 = mdy(use_actigraphy_date_t3),
+    use_actigraphy_date_t4 = mdy(use_actigraphy_date_t4),
+    num_of_days_btwn_t3 =
+      abs((use_actigraphy_date_t3 %--% act_start_date)/ddays(1)),
+    num_of_days_btwn_t4 =
+      abs((use_actigraphy_date_t4 %--% act_start_date)/ddays(1)),
+    num_of_days_btwn =
+      ifelse(
+        is.na(num_of_days_btwn_t3),
+        num_of_days_btwn_t4,
+        num_of_days_btwn_t3
+      )
+    ) # number of days between the act start date in the data and the summary sheet overlap
+
+sleep_act_usable_clean8 <-
+  sleep_act_usable_clean7 %>%
+  dplyr::select(-c(num_of_days_btwn_t3, num_of_days_btwn_t4, starts_with("use")))
+
+sleep_act_usable_clean9 <-
+  sleep_act_usable_clean8 %>%
+  group_by(ELS_ID) %>%
+  mutate(
+    act_num_resp = n(),
+    act_rr = act_num_resp/14
+  )
+```
+
+### summmary
+
+```{r}
+sleep_act_usable_clean9 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    n = n()
+  ) # 103 subjects
+write_csv(sleep_act_usable_clean9, "simul_actigraphy_subjs.csv")
+```
+
+# Data viz
+
+> for those with simulataneous ema and actigraphy
+
+```{r viz sleep sat and hours}
+sleep_act_usable_clean9 %>%
+  ggplot(
+    aes(respnumber, scale(efficiency), group = ELS_ID)
+    ) +
+  geom_line(color = "blue") +
+  geom_line(aes(x = respnumber, y = scale(sleep_time_hrs), group = ELS_ID), color = "blue", alpha = .5) +
+  facet_wrap(~ELS_ID) +
+  scale_x_continuous(limits = c(1,15)) +
+  theme_classic() +
+  theme(
+  strip.text.x = element_blank(),
+  axis.title.y = element_text(size = 10)
+  ) +
+  labs(
+    x = "Day",
+    y = "Sleep Efficiency (dark blue), Sleep Duration (light blue)",
+    title = "Trajectories of Objective Sleep Efficiency and Duration"
+    )
+
+ggsave("daily_act_sleep_traj.png", width = 7, height = 5.5, dpi = 400)
+```
+
+
+### distribution of weekday vs. weekend and association with sleep sat and hrs
+
+```{r}
+level_key <- c(wkday = "weekday", wkend = "weekend")
+sleep_act_usable_clean10 <-
+  sleep_act_usable_clean9 %>%
+  mutate(
+    week = factor(week),
+    week =  recode_factor(week,!!!level_key),
+    respnumber = as.numeric(respnumber)
+  )
+
+# summary
+sleep_act_usable_clean10 %>%
+  group_by(ELS_ID, week) %>%
+  summarise(
+    n = n()
+  )
+
+
+sleep_act_usable_clean10 %>%
+  drop_na(efficiency) %>%
+  drop_na(sleep_time_hrs) %>%
+  drop_na(week) %>%
+  ggplot(
+    aes(
+      x = respnumber, 
+      y = scale(efficiency)
+    )
+  ) +
+  geom_line(aes(group = ELS_ID), color = "blue", alpha = .5) +
+  geom_smooth(se=FALSE, size = 2, colour = "darkblue") +
+  geom_line(aes(x = respnumber, y = scale(sleep_time_hrs), group = ELS_ID), color = "darkgoldenrod2", alpha = .5) +
+  geom_smooth(aes(x = respnumber, y = scale(sleep_time_hrs)), size = 2, se = FALSE, colour = "darkgoldenrod2") +
+  facet_wrap(~week) +
+  theme_classic() +
+  scale_x_continuous(
+    limits = c(1, 14),                    
+    breaks = seq(1, 14, 1)
+    ) +
+  labs(
+    x = "Day",
+    y = "Sleep Efficiency = blue, Sleep Duration = gold"
+  )
+ggsave("sleepeff_and_hours_byDay_byWkdayWkend.png", width = 7, height = 5)
+
+```
+
+#### tests
+```{r}
+# sleep efficiency differences by weekday/wkend 
+summary(lmer(scale(efficiency) ~ scale(respnumber) +factor(week) + (1 + scale(respnumber)|ELS_ID), data = sleep_act_usable_clean10))
+## no effect of weekday/weekend
+
+# sleep duration differences by weekday/wkend 
+summary(lmer(scale(sleep_time_hrs) ~ scale(respnumber) + factor(week) + (1 |ELS_ID), data = sleep_act_usable_clean10))
+## sig effect (more hours on weekend)
+```
+
+### write
+
+```{r}
+write_csv(sleep_act_usable_clean10, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv")
+```
+
+### Averaging over the two weeks to obtain representative estimates for these constructs
+
+
+```{r}
+act_sleep_red <-
+  sleep_act_usable_clean10 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::mutate(
+    efficiency_mean = mean(efficiency, na.rm = TRUE),
+    sleep_time_hrs_mean = mean(sleep_time_hrs, na.rm = TRUE),
+  ) %>%
+  mutate(ELS_ID = factor(ELS_ID)) %>%
+  dplyr::select(ELS_ID, act_num_resp, act_rr, efficiency_mean, sleep_time_hrs_mean) %>%
+  distinct() %>%
+  ungroup()
+```
+
+### write
+
+```{r}
+write_csv(act_sleep_red, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv")
+```

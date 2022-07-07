@@ -1,0 +1,251 @@
+---
+title: "Internal_Consistencies"
+author: "Jackie Kirshenbaum"
+date: "6/15/2022"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(naniar)
+```
+
+
+#SCORE ASQ:
+```{r, message=FALSE}
+asqt3_fp <- "~/Dropbox/JSK_SC/els_measures/asq/asq.T3.csv"
+
+
+asqt3 <- 
+  read_csv(asqt3_fp) %>%
+  mutate(
+    ELS_ID = as.numeric(ELS_ID),
+    ELS_ID = as.character(ELS_ID),
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  filter(ELS_ID != "6") %>%
+  filter(ELS_ID != "17") %>%
+  filter(ELS_ID != "38") %>%
+  filter(ELS_ID != "101") %>% 
+  filter(ELS_ID != "192")  %>%
+  filter(
+    !Subject_ID_Timepoint == "196-T3"
+    ) %>%
+  replace_with_na_all(
+    .,
+    condition = ~.x %in% c("888")
+    ) %>%
+  dplyr::select(ELS_ID, starts_with("asq_"))
+
+
+asqt4_fp <- "~/Dropbox/JSK_SC/els_measures/asq/asq.T4.csv"
+asqt4 <- 
+  read_csv(asqt4_fp) %>%
+  mutate(
+    ELS_ID = as.numeric(ELS_ID),
+    ELS_ID = as.character(ELS_ID),
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  filter(ELS_ID %in% c("6", "17", "38", "101", "192")) %>%
+  replace_with_na_all(
+    .,
+    condition = ~.x %in% c("888")
+    ) %>%
+  dplyr::select(ELS_ID, starts_with("asq_"))
+
+df_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+df <- 
+  read_csv(df_fp) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(ELS_ID, ASQ_total)
+
+```
+
+### Renaming variables
+```{r}
+names_asqt3_old <-
+  asqt3 %>%
+  dplyr::select(starts_with("asq")) %>%
+  names()
+
+names_asqt3_new <-
+  asqt3 %>%
+  dplyr::select(starts_with("asq")) %>%
+  names() %>%
+  stringr::str_remove_all(".T3")
+
+asqt3_clean <-
+  asqt3 %>%
+  rename_at(vars(all_of(names_asqt3_old)), ~names_asqt3_new) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(-asq_date)
+
+names_asqt4_old <-
+  asqt4 %>%
+  dplyr::select(starts_with("asq")) %>%
+  names()
+
+names_asqt4_new <-
+  asqt4 %>%
+  dplyr::select(starts_with("asq")) %>%
+  names() %>%
+  stringr::str_remove_all(".T4")
+
+asqt4_clean <-
+  asqt4 %>%
+  rename_at(vars(all_of(names_asqt4_old)), ~names_asqt4_new) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(-c(asq_date:ASQ_emerge_adult))
+
+
+```
+
+## Merging
+
+```{r}
+asq <-
+  rbind(asqt3_clean, asqt4_clean)
+
+asq_merge <-
+  left_join(
+    df,
+    asq,
+    by = "ELS_ID"
+  ) %>%
+  drop_na()
+```
+
+## For internal consistency
+```{r}
+library(ltm)
+  
+asq_merge <-
+  asq_merge %>%
+  dplyr::select(-ELS_ID, -ASQ_total)
+cronbach.alpha(asq_merge) # 0.97
+```
+
+#SCORE CMEP:
+```{r, message=FALSE}
+cmept3_fp <- "~/Dropbox/JSK_SC/els_measures/cmep/cmep.T3.csv"
+
+
+cmept3 <- 
+  read_csv(cmept3_fp) %>%
+  mutate(
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  filter(ELS_ID != "6") %>%
+  filter(ELS_ID != "17") %>%
+  filter(ELS_ID != "38") %>%
+  filter(ELS_ID != "101") %>% 
+  filter(ELS_ID != "192")  %>%
+  filter(
+    !Subject_ID_Timepoint == "196-T3"
+    ) %>%
+  replace_with_na_all(
+    .,
+    condition = ~.x %in% c("888")
+    ) %>%
+  dplyr::select(ELS_ID, starts_with("cmep_")) %>%
+  mutate(
+    ELS_ID = str_replace(ELS_ID, "\\.2", "")
+  )
+
+
+
+cmept4_fp <- "~/Dropbox/JSK_SC/els_measures/cmep/cmep.T4.csv"
+cmept4 <- 
+  read_csv(cmept4_fp) %>%
+  mutate(
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  filter(ELS_ID %in% c("6", "17", "38", "101", "192")) %>%
+  replace_with_na_all(
+    .,
+    condition = ~.x %in% c("888")
+    ) %>%
+  dplyr::select(ELS_ID, starts_with("cmep_"))
+
+df_cmep_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+df_cmep <- 
+  read_csv(df_fp) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(ELS_ID, cmep_total)
+
+```
+
+### Renaming variables
+```{r}
+names_cmept3_old <-
+  cmept3 %>%
+  dplyr::select(starts_with("cmep")) %>%
+  names()
+
+names_cmept3_new <-
+  cmept3 %>%
+  dplyr::select(starts_with("cmep")) %>%
+  names() %>%
+  stringr::str_remove_all(".T3")
+
+cmept3_clean <-
+  cmept3 %>%
+  rename_at(vars(all_of(names_cmept3_old)), ~names_cmept3_new) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(-cmep_date)
+
+names_cmept4_old <-
+  cmept4 %>%
+  dplyr::select(starts_with("cmep")) %>%
+  names()
+
+names_cmept4_new <-
+  cmept4 %>%
+  dplyr::select(starts_with("cmep")) %>%
+  names() %>%
+  stringr::str_remove_all(".T4")
+
+cmept4_clean <-
+  cmept4 %>%
+  rename_at(vars(all_of(names_cmept4_old)), ~names_cmept4_new) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(-cmep_date, -CMEP_total)
+
+
+```
+
+## Merging
+
+```{r}
+cmep <-
+  rbind(cmept3_clean, cmept4_clean)
+
+cmep_merge <-
+  left_join(
+    df_cmep,
+    cmep,
+    by = "ELS_ID"
+  ) %>%
+  drop_na()
+```
+
+## For internal consistency
+```{r}
+cmep_merge <-
+  cmep_merge %>%
+  dplyr::select(-ELS_ID, -cmep_total)
+cronbach.alpha(cmep_merge) # 0.818
+```
+

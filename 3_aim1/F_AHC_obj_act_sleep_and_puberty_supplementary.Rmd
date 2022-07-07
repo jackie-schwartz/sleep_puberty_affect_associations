@@ -1,0 +1,318 @@
+---
+title: "AHC_obj_act_sleep_and_puberty_supplementary"
+author: "Jackie Kirshenbaum"
+date: "4/12/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+> This script analyzes all participants in high school + post-highschool 
+
+
+# Load Libraries
+```{r, message=FALSE,echo=FALSE,warning=FALSE}
+library(tidyverse)
+library(modelr)
+library(foreign)
+library(readxl)
+library(haven) 
+library(expss)
+library(chron)
+library(hms)
+library(lubridate)
+library(lmerTest)
+```
+
+# Reading in ema, actigraphy, and puberty/demo dfs
+
+```{r,message=FALSE, filepaths}
+
+# full AHC sample with pubertal and demographic info
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+
+ahc_obj_df <-
+  read_csv(pub_demo_act_ema_comb_fp) %>%
+  mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble() %>%
+  dplyr::select(-contains("daily"), -sleep_num_resp, -sleep_rr)
+
+```
+
+# Load Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(modelr)
+library(foreign)
+library(readxl)
+library(haven) 
+library(expss)
+library(chron)
+library(hms)
+library(lubridate)
+library(lmerTest)
+```
+
+
+```{r}
+options(scipen = 999, digits = 5)
+```
+
+# Testing association between pubertal stage and objective sleep efficiency
+
+## removing outliers in my DV 
+```{r}
+# outliers: outside 1.5 times the interquartile range above the upper quartile and below the lower quartile (Q1 - 1.5 * IQR or Q3 + 1.5 * IQR).
+boxplot.stats(ahc_obj_df$efficiency_mean)$out # 0 outliers
+effout <- boxplot.stats(ahc_obj_df$efficiency_mean)$out
+effoutid <-  which(ahc_obj_df$efficiency_mean %in% c(effout))
+ahc_obj_df[effoutid, ]$ELS_ID 
+
+ahc_obj_df_rem <-
+  ahc_obj_df %>%
+  filter(
+    !ELS_ID == "143"
+  ) 
+```
+
+## centering based on this sample
+I standardized tanner stage, age at tanner assessment, and bmi within each sex
+```{r}
+ahc_obj_cent <-
+  ahc_obj_df_rem %>%
+  dplyr::mutate(
+    Sex = factor(sex),
+    COVID = factor(COVID),
+    act_efficiency_z = as.numeric(scale(efficiency_mean)),
+    act_sleepdur_z = as.numeric(scale(sleep_time_hrs_mean)),
+    cmep_z = as.numeric(scale(cmep_total)),
+    Household_Income_ahc_z = as.numeric(scale(Household_Income_ahc)),
+    sumsev_type_z = as.numeric(scale(sumsev_type_t1)),
+    ASQ_total_z = as.numeric(scale(ASQ_total)),
+    act_rr_z = as.numeric(scale(act_rr))
+    ) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
+    tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    BMI_ahc_z = as.numeric(scale(BMI_ahc)),
+    Age_ahc_z = as.numeric(scale(Age_ahc))
+  ) %>%
+  dplyr::ungroup()
+```
+
+## Average RR
+
+```{r}
+summary(ahc_obj_cent$act_rr)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#   0.214   0.857   1.000   0.994   1.071   2.786 
+```
+
+
+## Testing potential covariates: asociations with sleep efficiency
+
+```{r}
+contrasts(ahc_obj_cent$Sex) <- contr.treatment(2)
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$BMI_ahc) # not sig
+# r=0.026997, p=0.82
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$Household_Income_ahc) #not sig
+# r=0.092118, p=0.40
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$act_rr) # not sig
+# r=-0.0046555, p=0.97
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$sumsev_type_t1) # not sig
+# r=0.020487, p=0.85
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$ASQ_total) # not sig
+# r=0.15793, p=0.15
+cor.test(ahc_obj_cent$efficiency_mean, ahc_obj_cent$cmep_total) # not sig
+# r=-0.1886, p=0.088
+summary(lm(scale(efficiency_mean) ~ Sex, data = ahc_obj_cent)) # not sig 
+# B=0.268, p=0.23
+summary(lm(scale(efficiency_mean) ~ COVID, data = ahc_obj_cent)) # not sig 
+# B=0.1592, p=0.48
+```
+
+## extra libraries
+```{r,message=FALSE}
+library(gvlma)
+library(car)
+library(BayesFactor)
+library(bayestestR)
+library(sjPlot)
+```
+
+
+## Association between Tanner Stage and sleep efficiency
+
+```{r}
+effpub <- lm(act_efficiency_z ~ tanner_average_ahc_z, data = ahc_obj_cent)
+summary(gvlma(effpub))
+summary(effpub)
+plot.gvlma(gvlma(effpub))
+
+# CI
+ci_effpub = Boot(effpub, coef,
+method='case', R=1000)
+boot_confint_pub <- confint(ci_effpub, type='norm')
+#                         2.5 %    97.5 %
+# tanner_average_ahc_z  -0.042397 0.37780
+
+# Bayes Factor
+bayes_pub <- regressionBF(
+  formula = act_efficiency_z ~ tanner_average_ahc_z, data = ahc_obj_cent
+) # 0.78559 
+
+
+```
+# Repeating with Age
+```{r}
+effage <- lm(act_efficiency_z ~ Age_ahc_z, data = ahc_obj_cent)
+summary(gvlma(effage))
+summary(effage)
+plot.gvlma(gvlma(effage))
+
+# CI
+ci_effage = Boot(effage, coef,
+method='case', R=1000)
+boot_confint_age <- confint(ci_effage, type='norm')
+#               2.5 %    97.5 %
+# Age_ahc_z   -0.10083 0.30378
+
+# Bayes Factor
+bayes_age<- regressionBF(
+  formula = act_efficiency_z ~ Age_ahc_z, data = ahc_obj_cent
+) # 0.33295 
+
+
+```
+
+# Testing association between pubertal stage and objective sleep duration
+
+## removing outliers in my DV 
+```{r}
+library(rstatix)
+library(moments)
+boxplot.stats(ahc_obj_df$sleep_time_hrs_mean)$out # 1 outlier
+durout <- boxplot.stats(ahc_obj_df$sleep_time_hrs_mean)$out
+duroutid <-  which(ahc_obj_df$sleep_time_hrs_mean %in% c(durout))
+ahc_obj_df[duroutid, ]$ELS_ID 
+
+ahc_obj_df_rem <-
+  ahc_obj_df %>%
+  filter(
+    !ELS_ID == "85"
+  ) 
+
+```
+
+
+## centering based on this sample
+I standardized tanner stage, age at tanner assessment, and bmi within each sex
+```{r}
+ahc_obj_df_rem_cent_hrs <-
+  ahc_obj_df_rem %>%
+  dplyr::mutate(
+    Sex = factor(sex),
+    act_efficiency_z = as.numeric(scale(efficiency_mean)),
+    act_sleepdur_z = as.numeric(scale(sleep_time_hrs_mean)),
+    Household_Income_ahc_z = as.numeric(scale(Household_Income_ahc)),
+    cmep_z = as.numeric(scale(cmep_total)),    
+    sumsev_type_z = as.numeric(scale(sumsev_type_t1)),
+    ASQ_total_z = as.numeric(scale(ASQ_total)),
+    act_rr_z = as.numeric(scale(act_rr))
+    ) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
+    tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    BMI_ahc_z = as.numeric(scale(BMI_ahc)),
+    Age_ahc_z = as.numeric(scale(Age_ahc))
+  ) %>%
+  dplyr::ungroup()
+
+contrasts(ahc_obj_df_rem_cent_hrs$Sex) <- contr.treatment(2)
+
+```
+
+
+
+## Testing potential covariates: asociations with sleep duration
+
+```{r}
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$BMI_ahc) # not sig
+# r=-0.036237, p=0.750
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$Household_Income_ahc) # not sig
+# r=0.16821, p=0.13
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$sumsev_type_t1) # not sig
+# r=-0.11585, p=0.29
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$ASQ_total) # not sig
+# r=0.086793, p=0.43
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$cmep_total) # sig
+# r=-0.22245, p=0.043
+cor.test(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean, ahc_obj_df_rem_cent_hrs$act_rr) # not sig
+# r=-0.099721, p=0.36
+summary(lm(act_sleepdur_z ~ Sex, data = ahc_obj_df_rem_cent_hrs)) # sig
+# B=0.837, p=0.0001
+
+t.test(sleep_time_hrs_mean ~ Sex, data = ahc_obj_df_rem_cent_hrs)
+# M for boys = 6.4300, M for girls = 7.0766
+sd(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean[ahc_obj_df_rem_cent_hrs$Sex == "1"]) # male sd = 0.7326
+sd(ahc_obj_df_rem_cent_hrs$sleep_time_hrs_mean[ahc_obj_df_rem_cent_hrs$Sex == "2"]) # female sd = 0.70037
+
+summary(lm(act_sleepdur_z ~ COVID, data = ahc_obj_df_rem_cent_hrs)) # not sig
+# B=0.0752, p=0.74
+```
+
+
+## Association between Tanner stage  and objective sleep duration
+
+```{r}
+
+pubhrs <- lm(act_sleepdur_z ~ tanner_average_ahc_z, data = ahc_obj_df_rem_cent_hrs)
+summary(gvlma(pubhrs))
+plot.gvlma(gvlma(pubhrs))
+
+# CI
+ci_pubhrs= Boot(pubhrs, coef,
+method='case', R=1000)
+boot_confint_ci_pubhrs <- confint(ci_pubhrs, type='norm')
+#                           2.5%  97.5%
+# tanner_average_ahc_z  -0.24239 0.2354
+
+# Bayes Factor
+bayes_pubhrs <- regressionBF(
+  formula = act_sleepdur_z ~ tanner_average_ahc_z, data = ahc_obj_df_rem_cent_hrs
+)
+# 0.22295
+
+
+```
+
+## Association between Age  and objective sleep duration
+
+```{r}
+
+agehrs <- lm(act_sleepdur_z ~ Age_ahc_z, data = ahc_obj_df_rem_cent_hrs)
+summary(gvlma(agehrs))
+plot.gvlma(gvlma(agehrs))
+
+# CI
+ci_agehrs= Boot(agehrs, coef,
+method='case', R=1000)
+boot_confint_ci_agehrs <- confint(ci_agehrs, type='norm')
+#               2.5%    97.5%
+# Age_ahc_z   -0.29858 0.08334
+
+# Bayes Factor
+bayes_agehrs <- regressionBF(
+  formula = act_sleepdur_z ~ Age_ahc_z, data = ahc_obj_df_rem_cent_hrs
+)
+# 0.3552
+
+
+```
+
+
+# Summary
+
+> Neither Pubertal stage nor age is  associated with daily sleep efficiency or duration. 

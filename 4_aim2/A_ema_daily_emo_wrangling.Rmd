@@ -1,0 +1,119 @@
+---
+title: "1_ema_daily_emo_wrangling"
+author: "Jackie"
+date: "04/13/22"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+#Load Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(modelr)
+library(foreign)
+library(readxl)
+library(haven) 
+library(expss)
+library(chron)
+library(hms)
+library(lubridate)
+library(psych)
+
+```
+
+# Reading in mw EMO long form data
+
+```{r,message=FALSE, filepaths}
+mw_emo_long_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv"
+mw_mood <-read_csv(mw_emo_long_fp) %>%
+  mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble()
+```
+
+
+## Reducing dimensionality
+
+```{r parsing dates}
+
+mw_mood_clean <-
+  mw_mood %>%
+  mutate(
+    neg_total =
+      dplyr::select(., 
+                    Daily_Sad,
+                    Daily_Annoyed.Angry,
+                    Daily_Grouchy.Cranky,
+                    Daily_Worried,
+                    Daily_Anxious,
+                    Daily_Bored,
+                    Daily_Want_Alone) %>%
+      rowMeans(na.rm = TRUE),
+    pos_total =
+      dplyr::select(., 
+                    Daily_Happy,
+                    Daily_Cheerful,
+                    Daily_Excited,
+                    Daily_Energetic,
+                    Daily_Want_Others
+                    ) %>%
+      rowMeans(na.rm = TRUE)
+  ) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) 
+```
+
+## dealing with not enough or missing data  
+
+
+
+```{r}
+library(corrr)
+library(corrplot)
+library(rmcorr)
+library(scipub)
+
+
+emamerge_mat <-
+  mw_mood_clean %>%
+  dplyr::select(
+    ELS_ID, starts_with("Daily_")
+    ) %>%
+  as_tibble() %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    Sad = mean(Daily_Sad, na.rm = TRUE),
+    Annoyed.Angry = mean(Daily_Annoyed.Angry, na.rm = TRUE),
+    Grouchy.Cranky = mean(Daily_Grouchy.Cranky, na.rm = TRUE),
+    Worried = mean(Daily_Worried, na.rm = TRUE),
+    Anxious = mean(Daily_Anxious, na.rm = TRUE),
+    Happy = mean(Daily_Happy, na.rm = TRUE),
+    Cheerful = mean(Daily_Cheerful, na.rm = TRUE),
+    Excited = mean(Daily_Excited, na.rm = TRUE),
+    Energetic = mean(Daily_Energetic, na.rm = TRUE),
+    Bored = mean(Daily_Bored, na.rm = TRUE),
+    Want.Others = mean(Daily_Want_Others, na.rm = TRUE),
+    Want.Alone = mean(Daily_Want_Alone, na.rm = TRUE)
+  ) %>%
+  dplyr::select(-ELS_ID)
+  
+emamerge_mat
+
+pval = cor.mtest(emamerge_mat, conf.level = 0.95)
+ema_filter_matpcor <- cor(emamerge_mat)
+
+png("emacorrplot.png")
+corrplot(ema_filter_matpcor, p.mat = pval$p, method = 'color', col = colorRampPalette(c("blue", "white", "darkorange"))(100), diag = FALSE, type = 'lower',
+         sig.level = c(0.001, 0.01, 0.04), pch.cex = 0.9, tl.col = "black",
+         insig = 'label_sig',pch.col = 'grey40', order = 'hclust')
+dev.off()
+```
+
+# writing data
+```{r}
+write_csv(mw_mood_clean, "MW_daily_emo_data_longform.csv")
+```
+

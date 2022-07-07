@@ -1,0 +1,442 @@
+---
+title: "combining_sleep_and_emo"
+author: "Jackie"
+date: "4/12/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+
+# libraries
+```{r,message=FALSE}
+library(tidyverse)
+library(lmtest)
+library(lubridate)
+#library(pmdplyr)
+library(sandwich)
+library(sjPlot)
+library(sjstats)
+```
+
+## functions
+```{r}
+getmode <- function(v, na.rm=TRUE) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+# function from ben bolker
+mylag <- function(x,lag) {
+  c(rep(NA,lag),head(x,-lag))
+}
+```
+
+# Read in data
+
+
+## Sleep: EMA
+
+```{r, message=FALSE}
+
+ema_sleep_long_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv"
+
+ema_sleep_long <-
+  read_csv(ema_sleep_long_fp) %>%
+  as_tibble() %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID),
+    day = factor(day),
+    wday = factor(wday),
+    dayorder = factor(respnumber),
+    week = factor(week),
+    trigger_tod = "Morning",
+    trigger_tod = factor(trigger_tod)
+    ) %>%
+  dplyr::rename(triggerdate = sleep_trigger_date) %>%
+  dplyr::rename(triggertime = sleep_trigger_time) %>%
+  dplyr::mutate(
+    trigger_tod_order =
+      ifelse(
+        trigger_tod == "Morning",
+        "0",
+        NA
+        )
+    ) %>%
+  relocate(trigger_tod, .after = triggertime) %>%
+  relocate(trigger_tod_order, .after = trigger_tod) 
+```
+
+## Affect: EMA
+
+```{r, message=FALSE}
+emo_long_fp <- "~/Dropbox/JSK_SC/_scripts/4_aim2/MW_daily_emo_data_longform.csv"
+mw_emo <- 
+  read_csv(emo_long_fp) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID),
+    day = factor(day),
+    wday = factor(wday),
+    week = factor(week),
+    trigger_tod = factor(emo_trigger_recode)
+    ) %>%
+  dplyr::rename(triggerdate = emo_trigger_date) %>%
+  dplyr::rename(triggertime = emo_trigger_time) %>%
+  dplyr::select(
+    ELS_ID,
+    triggerdate,
+    day,
+    triggertime,
+    trigger_tod,
+    wday,
+    week,
+    neg_total,
+    pos_total,
+    emo_rr
+  ) 
+
+mw_emo_filt <-
+  mw_emo %>%
+  dplyr::mutate(
+    trigger_tod_order =
+      ifelse(
+        trigger_tod == "Morning",
+        "0",
+        NA
+        ),
+    trigger_tod_order =
+      ifelse(
+        trigger_tod == "Afternoon",
+        "1",
+        trigger_tod_order
+        ),
+    trigger_tod_order =
+      ifelse(
+        trigger_tod == "Evening",
+        "2",
+        trigger_tod_order
+        )
+    ) %>%
+  relocate(trigger_tod_order, .after = trigger_tod) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID)
+  )
+```
+
+## Sleep: Actigraphy
+
+```{r, message=FALSE}
+
+act_sleep_long_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv"
+
+act_sleep_long <-
+  read_csv(act_sleep_long_fp) %>%
+  as_tibble() %>%
+  mutate(
+    ELS_ID = factor(ELS_ID),
+    day = factor(day),
+    wday = factor(wday),
+    respnumber = factor(respnumber),
+    week = factor(week),
+    trigger_tod = "Morning",
+    trigger_tod = factor(trigger_tod)
+    ) %>%
+  dplyr::rename(triggerdate = act_trigger_date) %>%
+  mutate(
+    trigger_tod_order =
+      ifelse(
+        trigger_tod == "Morning",
+        "0",
+        NA
+        )
+    ) %>%
+  relocate(trigger_tod, .after = respnumber) %>%
+  relocate(trigger_tod_order, .after = trigger_tod) 
+```
+# Merging
+
+## Deselecting vars not needed
+
+```{r}
+# ema sleep
+ema_sleep_long_select <-
+  ema_sleep_long %>%
+  dplyr::select(
+    -c(day, dayorder, triggertime, trigger_tod, trigger_tod_order, wday, week, num_of_days_btwn, sleep_survey_submit_date, sleep_survey_submit_time, device_OS, sleep_num_resp, sleep_rr)
+  ) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID),
+    triggerdate = factor(triggerdate)
+  )
+# actigraphy sleep
+act_sleep_long_select <-
+  act_sleep_long %>%
+  dplyr::select(
+    -c(day, trigger_tod, trigger_tod_order, wday, week, num_of_days_btwn, Subject_ID_Timepoint, act_timepoint, start_time, end_time, act_num_resp)
+  ) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID),
+    triggerdate = factor(triggerdate)
+  )
+# ema emotion
+mw_emo_filt_select <-
+  mw_emo_filt %>%
+  dplyr::select(
+    -c(day,triggertime)
+  ) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID),
+    trigger_tod = factor(trigger_tod),
+    trigger_tod_order = factor(trigger_tod_order),
+    wday = factor(wday),
+    week = factor(week),
+    triggerdate = factor(triggerdate)
+  )
+```
+
+## merging ema
+
+```{r}
+mw_merge <-
+  left_join(
+    mw_emo_filt_select,
+    ema_sleep_long_select,
+    by = c("ELS_ID", "triggerdate") 
+  ) 
+mw_merge2 <-
+  left_join(
+    mw_merge,
+    act_sleep_long_select,
+    by = c("ELS_ID", "triggerdate") 
+  ) 
+mw_merge2 <-
+  mw_merge2 %>%
+  mutate(
+    triggerdate = ymd(triggerdate)
+  )
+
+
+mw_merge2 <-
+  mw_merge2 %>%
+  dplyr::select(
+    ELS_ID, triggerdate, trigger_tod, trigger_tod_order, wday, week, everything()
+  )
+
+mw_merge2 %>%
+  distinct(ELS_ID) # 107
+```
+
+# Summary
+
+```{r} 
+sum_tod <-
+  mw_merge2 %>%
+  dplyr::group_by(ELS_ID, trigger_tod) %>%
+  dplyr::summarise(
+    n_tod = n()
+  )
+sum_tod_wide <-
+  sum_tod %>%
+  pivot_wider(
+    id_cols = ELS_ID,
+    names_from = trigger_tod,
+    values_from = n_tod
+    ) %>%
+  mutate(
+    no_morning_ema =
+      ifelse(is.na(Morning), "no_emo_morn_data", NA)
+  )
+
+mw_merge3 <-
+  left_join(
+    mw_merge2,
+    sum_tod_wide,
+    by = "ELS_ID"
+  )
+```
+
+```{r}
+# Merging with puberty and demo data
+
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+
+pub_demos_l2vars <- 
+  read_csv(pub_demo_act_ema_comb_fp) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID),
+    sex = factor(sex),
+    high_school = factor(high_school)
+  ) %>%
+  dplyr::select(
+    -c(act_rr, interval_btwn_ema_and_tanner, interval_btwn_act_and_tanner, tanner_date.T1, gender_t3, gender_t4)
+  )
+
+mw_merge4 <-
+  left_join(
+    mw_merge3,
+    pub_demos_l2vars,
+    by = "ELS_ID"
+  ) %>% 
+  drop_na(tanner_average_ahc) %>%
+  relocate(no_morning_ema, .after = ELS_ID) %>%
+  filter(is.na(no_morning_ema)) %>%
+  dplyr::select(-no_morning_ema)
+
+mw_merge4 %>%
+  distinct(ELS_ID)
+
+
+mw_merge4 <- mw_merge4[order(mw_merge4$triggerdate), ]
+
+mw_merge5 <-
+  mw_merge4 %>%
+  mutate(
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::mutate(
+    startdate = min(triggerdate),
+    dayorder = abs((triggerdate %--% startdate)/ddays(1)),
+    respnumber_order = order(triggerdate),    
+    respnumber = respnumber_order - min(respnumber_order) + 1
+  ) %>%
+  relocate(
+    startdate, .before = triggerdate
+  ) %>%
+  relocate(
+    dayorder, .after = triggerdate
+  ) %>%
+  relocate(
+    respnumber, .after = dayorder
+  )
+
+mw_merge5 %>%
+  distinct(ELS_ID) # 87
+```
+
+```{r}
+summary(as.integer(table(mw_merge5$ELS_ID))) # els ids subj
+```
+
+```{r}
+hist(mw_merge5$neg_total)
+library(moments)
+# morning
+skewness(mw_merge5$neg_total[mw_merge5$trigger_tod_order == 0]) # 1.063707
+# noon
+skewness(mw_merge5$neg_total[mw_merge5$trigger_tod_order == 1]) # 0.8803846
+# evening
+skewness(mw_merge5$neg_total[mw_merge5$trigger_tod_order == 2]) # 0.9401761
+
+# all NA at morn, noon, night are skewed so, transforming all
+mw_merge5 <-
+  mw_merge5 %>%
+  dplyr::mutate(
+    neg_total_log = log10(neg_total),
+    neg_total_sqrt = sqrt(neg_total)
+  )
+skewness(mw_merge5$neg_total_log) # -1.2159 ooo terrible
+skewness(mw_merge5$neg_total_sqrt) # 0.0027468 much better
+
+
+summary(mw_merge5$neg_total_sqrt)
+sd(mw_merge5$neg_total_sqrt)
+```
+
+
+```{r}
+neg_total_sqrt_hist <- 
+  mw_merge5 %>%
+  ggplot(
+    aes(x = neg_total_sqrt)
+  ) +
+  geom_histogram(color = "black", alpha = .5) +
+  theme_classic() +
+  labs(
+    x = "Daily Negative Affect",
+    title = "Distribution of Daily Negative Affect"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  )
+neg_total_sqrt_hist
+
+
+pos_total_sqrt_hist <- 
+  mw_merge5 %>%
+  ggplot(
+    aes(x = pos_total)
+  ) +
+  geom_histogram(color = "black", alpha = .5) +
+  theme_classic() +
+  labs(
+    x = "Daily Positive Affect",
+    title = "Distribution of Daily Positive Affect"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  )
+pos_total_sqrt_hist
+
+library(gridExtra)
+library(cowplot)
+pana_dist <- 
+  cowplot::plot_grid(
+    neg_total_sqrt_hist, 
+    pos_total_sqrt_hist,
+    labels = c('A', 'B'), 
+    label_size = 10
+    )
+ggsave("pana_dist.png", pana_dist, width = 7, height = 3.5)
+```
+
+## showing clusters of ELS_IDs in relation to neg affect just as example
+```{r}
+mw_merge_cent <-
+  mw_merge5 %>%
+  ungroup() %>%
+  dplyr::select(
+    -c(simul_ahc, interval_ema_and_act, tanner_date_ahc, sleep_num_resp)
+  )
+
+library(lmerTest)
+mw_merge_cent_randids <-
+  mw_merge_cent[1:234,]
+mw_merge_cent_randids %>%
+  ggplot(
+    aes(
+      x = dayorder,
+      y = neg_total_sqrt,
+      color = ELS_ID
+    )
+  ) +
+  geom_point()+
+  facet_wrap(~ELS_ID) +
+  theme_classic()
+
+library(misty)
+multilevel.icc(mw_merge_cent$neg_total_sqrt, cluster = mw_merge_cent$ELS_ID, type = 1, method = "lme4") # 0.68219
+mod <- lmer(neg_total_sqrt ~ 1 + (1|ELS_ID), data = mw_merge_cent)
+performance::icc(mod)
+multilevel.icc(mw_merge_cent$pos_total, cluster = mw_merge_cent$ELS_ID, type = 1, method = "lme4") # 0.51074
+multilevel.icc(mw_merge_cent$DailySleep_satisfaction, cluster = mw_merge_cent$ELS_ID, type = 1, method = "lme4") # 0.47353
+```
+
+## Write df
+_Includes triggerdate, respnumber, trigger_tod (Morning, Afternoon, Evening), wday, week, neg_total, pos_total, emo_rr, 
+```{r}
+mw_merge_cent <-
+  mw_merge_cent %>%
+  dplyr::select(-ends_with("_mean"), -race, -neg_total_log, -respnumber.x, -respnumber.y) %>%
+  dplyr::select(
+    ELS_ID, sex, high_school, triggerdate, dayorder, respnumber, trigger_tod, trigger_tod_order, wday, week, tanner_average_ahc,  DailySleep_satisfaction, DailySleep_hrs_rec, efficiency, sleep_time_hrs, neg_total, neg_total_sqrt, pos_total,  everything()
+  )
+
+write_csv(mw_merge_cent, "ema_and_act_merge.csv")
+```
+

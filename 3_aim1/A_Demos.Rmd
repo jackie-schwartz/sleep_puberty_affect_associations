@@ -1,0 +1,347 @@
+---
+title: "Demos"
+author: "Jackie Kirshenbaum"
+date: "3/26/2022"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Load Libraries
+```{r, message=FALSE,echo=FALSE}
+library(tidyverse)
+library(modelr)
+library(foreign)
+library(readxl)
+library(haven) 
+library(expss)
+library(chron)
+library(hms)
+library(lubridate)
+library(lmerTest)
+```
+
+
+# Reading in ema and puberty/demo dfs
+
+```{r filepaths}
+ema_fp <-
+  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/EMA_daily_sleep_data_reduced.csv"
+
+act_fp <-
+  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv"
+
+# full AHC sample with pubertal and demographic info
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_ahc_merged.csv"
+
+schooling_fp <- "~/Dropbox/JSK_SC/demographic/curated_sheets/ahc_full_sample_hs_data.csv"
+
+```
+
+```{r, message=FALSE,echo=FALSE}
+ema <- read_csv(ema_fp) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble()
+
+act <- read_csv(act_fp) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble()
+
+pub <- read_csv(pub_demo_act_ema_comb_fp) %>% # remember this dataframe is based on a bunch of scriptss that aligned the tanner and age with the AHC date (all variables - eg, Sex, BMI are based on the AHC timepoint)
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble()
+
+schooling <- read_csv(schooling_fp) %>%
+  dplyr::select(ELS_ID, high_school) %>%
+  dplyr::mutate(
+    ELS_ID = as.numeric(ELS_ID),
+    ELS_ID = as.character(ELS_ID),
+    ELS_ID = as.factor(ELS_ID)
+    ) %>% 
+  dplyr::mutate(
+    high_school = as.character(high_school),
+    high_school = as.factor(high_school)
+    ) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID),
+    high_school = factor(high_school)
+  )
+  
+```
+
+
+## merging dfs
+And figuring out if any rows were duplicated by merging
+
+```{r}
+ema_and_act <-
+  full_join(
+    act,
+    ema,
+    by = "ELS_ID"
+  ) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID)
+  )
+
+write_csv(ema_and_act, "ema_and_act.csv")
+
+ema_and_act <-
+  ema_and_act %>%
+  drop_na(dailysleep_sat_mean) %>%
+  drop_na(efficiency_mean)
+
+pub_ema_and_act <-
+  left_join(
+    ema_and_act,
+    pub,
+    by = "ELS_ID"
+  ) %>%
+  relocate(tanner_average_ahc, .after = ELS_ID) %>%
+  drop_na(tanner_average_ahc) %>%
+  dplyr::mutate(
+    ELS_ID = as.factor(ELS_ID)
+  )
+
+pub_ema_and_act <-
+  left_join(
+    pub_ema_and_act,
+    schooling,
+    by = "ELS_ID"
+  )
+```
+
+
+### mutating high school info
+```{r}
+pub_ema_and_act_timept <-
+  pub_ema_and_act %>%
+  dplyr::mutate(
+    high_school = as.character(high_school)
+  ) %>%
+  dplyr::mutate(
+    high_school = ifelse(is.na(high_school), "1", high_school) # 3 participants didn't have school information, but based on age < 17 years old, we inferred high school
+  ) %>%
+  dplyr::mutate(
+    high_school = as.factor(high_school)
+  )
+write_csv(pub_ema_and_act_timept, "pub_ema_act_merged.csv")
+```
+
+
+
+# Descriptives - all
+
+
+```{r}
+
+desc_all_demo_desc <-
+  pub_ema_and_act_timept %>%
+  dplyr::summarize(
+    n = n(),
+    tanner_mean = mean(tanner_average_ahc),
+    tanner_sd = sd(tanner_average_ahc),
+    tanner_min = min(tanner_average_ahc),
+    tanner_max = max(tanner_average_ahc),
+    tannerearly = sum(tanner_average_ahc < 3),
+    tannerearlyperc = (tannerearly/n) *100,
+    tannermid = sum(tanner_average_ahc >=3  & tanner_average_ahc < 4),
+    tannermidperc = (tannermid/n)*100,
+    tannerlate= sum(tanner_average_ahc >= 4 & tanner_average_ahc < 5),
+    tannerlateperc = (tannerlate/n)*100,
+    tannerpost = sum(tanner_average_ahc == 5),
+    tannerpostperc = (tannerpost/n)*100,
+    age_mean = mean(Age_ahc),
+    age_sd = sd(Age_ahc),
+    age_min = min(Age_ahc),
+    age_max = max(Age_ahc),
+    BMI_mean = mean(BMI_ahc, na.rm = TRUE),
+    BMI_sd = sd(BMI_ahc, na.rm = TRUE),
+    BMI_min = min(BMI_ahc, na.rm = TRUE),
+    BMI_max = max(BMI_ahc, na.rm = TRUE),
+    household_income_min = min(Household_Income_ahc, na.rm = TRUE),
+    household_income_max = max(Household_Income_ahc, na.rm = TRUE),
+    household_income_1 = sum(Household_Income_ahc == 1, na.rm = TRUE),
+    household_income_1perc = (household_income_1/n)*100,    
+    household_income_2 = sum(Household_Income_ahc == 2, na.rm = TRUE),
+    household_income_2perc = (household_income_2/n)*100,
+    household_income_3 = sum(Household_Income_ahc == 3, na.rm = TRUE),
+    household_income_3perc = (household_income_3/n)*100,
+    household_income_4 = sum(Household_Income_ahc == 4, na.rm = TRUE),
+    household_income_4perc = (household_income_4/n)*100,    
+    household_income_5 = sum(Household_Income_ahc == 5, na.rm = TRUE),
+    household_income_5perc = (household_income_5/n)*100,    
+    household_income_6 = sum(Household_Income_ahc == 6, na.rm = TRUE),
+    household_income_6perc = (household_income_6/n)*100,    
+    household_income_7 = sum(Household_Income_ahc == 7, na.rm = TRUE),
+    household_income_7perc = (household_income_7/n)*100,    
+    household_income_8 = sum(Household_Income_ahc == 8, na.rm = TRUE),
+    household_income_8perc = (household_income_8/n)*100,      
+    household_income_9 = sum(Household_Income_ahc == 9, na.rm = TRUE),
+    household_income_9perc = (household_income_9/n)*100,     
+    household_income_10 = sum(Household_Income_ahc == 10, na.rm = TRUE),
+    household_income_10perc = (household_income_10/n)*100,   
+    household_income_NA = sum(is.na(Household_Income_ahc)),
+    household_income_NA_perc = (household_income_NA/n)*100,
+    days_between_ema_and_act_mean= mean(interval_ema_and_act),
+    days_between_ema_and_act_sd = sd(interval_ema_and_act),
+    days_between_ema_and_act_min = min(interval_ema_and_act),
+    days_between_ema_and_act_max = max(interval_ema_and_act),        
+    days_between_tanner_and_ema_mean= mean(interval_btwn_ema_and_tanner),
+    days_between_tanner_and_ema_sd = sd(interval_btwn_ema_and_tanner),
+    days_between_tanner_and_ema_min = min(interval_btwn_ema_and_tanner),
+    days_between_tanner_and_ema_max = max(interval_btwn_ema_and_tanner),
+    days_between_tanner_and_act_mean= mean(interval_btwn_act_and_tanner),
+    days_between_tanner_and_act_sd = sd(interval_btwn_act_and_tanner),
+    days_between_tanner_and_act_min = min(interval_btwn_act_and_tanner),
+    days_between_tanner_and_act_max = max(interval_btwn_act_and_tanner),    
+    sumsev_type_mean = mean(sumsev_type_t1, na.rm = TRUE),
+    sumsev_type_sd = sd(sumsev_type_t1, na.rm = TRUE),
+    sumsev_type_min = min(sumsev_type_t1, na.rm = TRUE),
+    sumsev_type_max = max(sumsev_type_t1, na.rm = TRUE),
+    asq_mean = mean(ASQ_total, na.rm = TRUE),
+    asq_sd = sd(ASQ_total, na.rm = TRUE),
+    asq_min = min(ASQ_total, na.rm = TRUE),
+    asq_max = max(ASQ_total, na.rm = TRUE),  
+    race_count_wh = sum(KSADS_Child_Race_by_P.T1 == "1"),
+    race_count_bla = sum(KSADS_Child_Race_by_P.T1 == "2"),
+    race_count_lat = sum(KSADS_Child_Race_by_P.T1 == "3"),
+    race_count_as = sum(KSADS_Child_Race_by_P.T1 == "4"),
+    race_count_bir = sum(KSADS_Child_Race_by_P.T1 == "5"),
+    race_count_oth = sum(KSADS_Child_Race_by_P.T1 == "6"),
+    race_perc_wh = (race_count_wh/n)*100,
+    race_perc_bla = (race_count_bla/n)*100,
+    race_perc_lat = (race_count_lat/n)*100,
+    race_perc_as = (race_count_as/n)*100,
+    race_perc_bir = (race_count_bir/n)*100,
+    race_perc_oth = (race_count_oth/n)*100,
+    sex_F = sum(sex == "2"),
+    sex_perc_F = (sex_F/n)*100,
+    COVID_n = sum(COVID == "yes"),
+    COVID_perc = (COVID_n/n)*100,
+    high_school_n = sum(high_school == "1"),
+    high_school_perc = (high_school_n/n)*100
+    )
+write_csv(desc_all_demo_desc, "demographics_ahc_table.csv")
+
+```
+
+
+## Reading actigraphy and ema subj lists
+> These are those who were in the ahc summary sheet, with "yes" for having simulatenous data, and at least 3 days of usable data
+
+```{r}
+act_sim_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/simul_actigraphy_subjs.csv"
+act_sim <- 
+  read_csv(act_sim_fp) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    Actigraphy_num_days = n()
+  )
+
+ema_sim_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/simul_ema_subjs.csv"
+ema_sim <- 
+  read_csv(ema_sim_fp) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    EMA_num_days = n()
+  )
+
+# selecting relevant cols from pub dataframe
+pub_select <-
+  pub %>%
+  dplyr::select(ELS_ID, simul_ahc, interval_ema_and_act) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID))
+
+#### merging ####
+
+ahc_subj_lists <-
+  left_join(
+    pub_select,
+    act_sim,
+    by = "ELS_ID"
+  )
+
+ahc_subj_lists <-
+  left_join(
+    ahc_subj_lists,
+    ema_sim,
+    by = "ELS_ID"
+  )
+
+ahc_subj_lists2 <-
+  ahc_subj_lists %>%
+  dplyr::mutate(
+    usable_act_and_ema =
+      ifelse(!is.na(Actigraphy_num_days) & !is.na(EMA_num_days), "Both", NA_real_),
+    usable_act_and_ema =
+      ifelse(!is.na(Actigraphy_num_days) & is.na(EMA_num_days), "Only_Act", usable_act_and_ema),
+    usable_act_and_ema =
+      ifelse(is.na(Actigraphy_num_days) & !is.na(EMA_num_days), "Only_EMA", usable_act_and_ema),
+    usable_act_and_ema =
+      ifelse(is.na(Actigraphy_num_days) & is.na(EMA_num_days), "Neither", usable_act_and_ema)
+  )
+
+write_csv(ahc_subj_lists2, "ahc_subject_list_simulataneous_and_usability.csv")
+
+```
+
+### Writign long files
+
+```{r}
+# Long form fps
+ema_long_fp <-
+  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv"
+
+act_long_fp <-
+  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv"
+
+
+ema_long <- read_csv(ema_long_fp) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble() %>%
+  dplyr::select(ELS_ID, device_OS, DailySleep_hrs_rec, DailySleep_satisfaction, respnumber, sleep_rr)
+
+act_long <- read_csv(act_long_fp) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble() %>%
+  dplyr::select(ELS_ID, sleep_time_hrs, efficiency, respnumber, act_rr)
+
+ema_and_act_long <-
+  left_join(
+    act_long,
+    ema_long,
+    by = c("ELS_ID", "respnumber")
+  ) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID)
+  )
+pub_ema_and_act_long <-
+  left_join(
+    ema_and_act_long,
+    pub,
+    by = "ELS_ID"
+  ) %>%
+  drop_na(efficiency) %>%
+  drop_na(DailySleep_satisfaction) %>%
+  dplyr::mutate(ELS_ID = as.factor(ELS_ID))
+
+pub_ema_and_act_long <-
+  left_join(
+    pub_ema_and_act_long,
+    schooling,
+    by = "ELS_ID"
+  )
+
+
+write_csv(pub_ema_and_act_long, "pub_ema_act_merged_long.csv")
+```
+

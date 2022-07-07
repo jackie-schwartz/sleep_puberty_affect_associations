@@ -1,0 +1,350 @@
+---
+title: "AHC_distributions"
+author: "Jackie"
+date: "03/27/22"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+# Load Libraries
+```{r, message=FALSE}
+library(tidyverse)
+library(modelr)
+library(foreign)
+library(readxl)
+library(haven) 
+library(expss)
+library(chron)
+library(hms)
+library(lubridate)
+library(lmerTest)
+```
+
+# Reading in ema, actigraphy, and puberty/demo dfs
+
+```{r filepaths}
+
+# full AHC sample with pubertal and demographic info
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+
+ahc_df <-
+  read_csv(pub_demo_act_ema_comb_fp) %>%
+  mutate(ELS_ID = factor(ELS_ID)) %>%
+  as_tibble()
+
+```
+
+
+### functions
+```{r}
+getmode <- function(v, na.rm=TRUE) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+```
+
+
+## Data Viz
+
+### distribution of sleep measures
+```{r}
+dailysleep_sat_mw <- 
+  ahc_df %>%
+  ggplot(
+    aes(x = dailysleep_sat_mean)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =15) +
+  theme_classic() +
+  labs(
+    x = "Averaged Daily Subjective Sleep Satisfaction"
+  ) + 
+  theme(
+    axis.text = element_text(size = 8, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 6),
+  )
+dailysleep_sat_mw
+
+
+dailysleep_hrs_mw <- 
+  ahc_df %>%
+  ggplot(
+    aes(x = dailysleep_hrs_mean)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =15) +
+  theme_classic() +
+  labs(
+    x = "Averaged Daily Subjective Sleep Duration (hrs)"
+  ) + 
+  theme(
+    axis.text = element_text(size = 8, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 6)
+  )
+dailysleep_hrs_mw
+
+cmep_dist <- 
+  ahc_df %>%
+  ggplot(
+    aes(x = cmep_total)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =15) +
+  theme_classic() +
+  labs(
+    x = "Morningness"
+  ) + 
+  theme(
+    axis.text = element_text(size = 8, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 6)
+  )
+cmep_dist
+
+eff_dist <-
+  ahc_df %>%
+  ggplot(
+    aes(x = efficiency_mean)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =15) +
+  theme_classic() +
+  labs(
+    x = "Averaged Daily Sleep Efficiency"
+  ) + 
+  theme(
+    axis.text = element_text(size = 8, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 6)
+  )
+eff_dist
+
+hrs_dist <-
+  ahc_df %>%
+  ggplot(
+    aes(x = sleep_time_hrs_mean)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =15) +
+  theme_classic() +
+  labs(
+    x = "Averaged Daily Sleep Duration"
+  ) + 
+  theme(
+    axis.text = element_text(size = 8, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 6)
+  )
+hrs_dist
+
+dailysleep_summary <-
+  ahc_df %>%
+  # filter(high_school == "1") %>%
+  dplyr::summarise(
+    dailysleep_sat_average = mean(dailysleep_sat_mean),
+    dailysleep_sat_disp = sd(dailysleep_sat_mean),
+    dailysleep_sat_min = min(dailysleep_sat_mean),
+    dailysleep_sat_max = max(dailysleep_sat_mean),
+    dailysleep_hrs_average = mean(dailysleep_hrs_mean),
+    dailysleep_hrs_disp = sd(dailysleep_hrs_mean),
+    dailysleep_hrs_min = min(dailysleep_hrs_mean),
+    dailysleep_hrs_max = max(dailysleep_hrs_mean),
+    cmep_average = mean(cmep_total, na.rm = TRUE),
+    cmep_disp = sd(cmep_total, na.rm = TRUE),
+    cmep_min = min(cmep_total, na.rm = TRUE),
+    cmep_max = max(cmep_total, na.rm = TRUE),
+    eff_average = mean(efficiency_mean, na.rm = TRUE),
+    eff_disp = sd(efficiency_mean, na.rm = TRUE),
+    eff_min = min(efficiency_mean, na.rm = TRUE),
+    eff_max = max(efficiency_mean, na.rm = TRUE),    
+    obj_hrs_average = mean(sleep_time_hrs_mean, na.rm = TRUE),
+    obj_hrs_disp = sd(sleep_time_hrs_mean, na.rm = TRUE),
+    obj_hrs_min = min(sleep_time_hrs_mean, na.rm = TRUE),
+    obj_hrs_max = max(sleep_time_hrs_mean, na.rm = TRUE)    
+  )
+dailysleep_summary
+getmode(ahc_df$dailysleep_sat_mean) #  51
+median(ahc_df$dailysleep_sat_mean) # 62.429
+getmode(ahc_df$dailysleep_hrs_mean) # 7
+median(ahc_df$dailysleep_hrs_mean) # 7.4
+pub_mw_finalcmep <-
+  ahc_df %>%
+  drop_na(cmep_total)
+getmode(pub_mw_finalcmep$cmep_total) # 23
+median(pub_mw_finalcmep$cmep_total) # 26.5
+getmode(ahc_df$efficiency_mean) # 80.63
+median(ahc_df$efficiency_mean) #  82.514
+getmode(ahc_df$sleep_time_hrs_mean) # 7
+median(ahc_df$sleep_time_hrs_mean) # 6.8012
+```
+
+```{r, message=FALSE}
+library(gridExtra)
+library(cowplot)
+sleep_all_dist <- 
+  cowplot::plot_grid(
+    dailysleep_sat_mw, 
+    dailysleep_hrs_mw, 
+    eff_dist,
+    hrs_dist,
+    labels = c('A', 'B', 'C', 'D'), 
+    label_size = 8
+    )
+ggsave("sleep_all_dist.png", sleep_all_dist, width = 7, height = 4)
+```
+
+### Correlation among sleep and other meaures
+
+```{r}
+library(scipub)
+library(htmlTable)
+library(kableExtra)
+correltable(
+    ahc_df,
+    vars = c("tanner_average_ahc", "Age_ahc", "cmep_total", "efficiency_mean", "sleep_time_hrs_mean", "dailysleep_sat_mean", "dailysleep_hrs_mean", "BMI_ahc", "Household_Income_ahc", "sleep_rr", "sumsev_type_t1", "ASQ_total"),
+    var_names = c("Tanner Stage", "Age", "Morningness", "Obj Efficiency", "Obj Sleep Duration", "Subj Satisfaction", "Subj Sleep Duration", "BMI", "Household Inc", "sleep RR", "ELS Severity", "Perceived Stress"),
+    tri = "lower",
+    round_n = 2,
+    colnum = TRUE,
+    cutempty = FALSE,
+    html = TRUE
+  )
+
+
+
+
+cor.test(ahc_df$sleep_time_hrs_mean, ahc_df$efficiency_mean)
+cor.test(ahc_df$dailysleep_hrs_mean, ahc_df$dailysleep_sat_mean)
+cor.test(ahc_df$efficiency_mean, ahc_df$dailysleep_sat_mean)
+cor.test(ahc_df$dailysleep_hrs_mean, ahc_df$sleep_time_hrs_mean)
+
+library(corrr)
+
+sleepcorr_mat <-
+  ahc_df %>%
+  dplyr::select(efficiency_mean, sleep_time_hrs_mean, dailysleep_sat_mean, dailysleep_hrs_mean) %>%
+  drop_na() %>%
+  dplyr::rename(
+    `Efficiency (Obj)` = efficiency_mean,
+    `Sleep Hours (Obj)` = sleep_time_hrs_mean,
+    `Satisfaction (Subj)` = dailysleep_sat_mean,
+    `Sleep Hours (Subj)` = dailysleep_hrs_mean
+  ) %>%
+  cor()
+
+
+library(corrplot)
+png(file = "sleepmeasurescorrplot.png")
+corrplot(sleepcorr_mat, method = 'color', tl.col = "black", addCoef.col = 'black', type = "lower", diag = FALSE)
+dev.off()
+```
+
+
+### distribution of most recent tanner score
+```{r}
+tanner_dist <- 
+  ahc_df %>%
+  ggplot(
+    aes(x = tanner_average_ahc)
+  ) +
+  geom_histogram(color = "black", alpha = .5) +
+  theme_classic() +
+  labs(
+    x = "Tanner Stage",
+    title = "Distribution of Tanner Stage"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  ) 
+tanner_dist
+
+```
+
+### distribution of most recent age
+```{r}
+age_dist <- 
+  ahc_df %>%
+  ggplot(
+    aes(x = Age_ahc)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =21) +
+  theme_classic() +
+  labs(
+    x = "Age",
+    title = "Distribution of Age"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  ) +
+  scale_x_continuous(
+    name = "Age",
+    limits = c(13, 21),                    
+    breaks = seq(13, 21, 1)
+    ) 
+age_dist
+
+```
+
+```{r}
+ahc_df_cent <-
+  ahc_df %>%
+  dplyr::mutate(
+    Sex = factor(sex)
+    ) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
+    tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    BMI_ahc_z = as.numeric(scale(BMI_ahc)),
+    Age_ahc_z = as.numeric(scale(Age_ahc))
+  ) %>%
+  ungroup()
+```
+
+
+```{r}
+rel_pub_mod <- lm(tanner_average_ahc_z ~ Age_ahc_z, data = ahc_df_cent)
+summary(rel_pub_mod)
+ahc_df_cent <-
+  ahc_df_cent %>% 
+  add_residuals(rel_pub_mod, var = "rel_pub_stg")
+```
+
+
+```{r}
+relpub_dist <- 
+  ahc_df_cent %>%
+  filter(Age_ahc < 19) %>%
+  ggplot(
+    aes(x = rel_pub_stg)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =21) +
+  theme_classic() +
+  labs(
+    x = "Relative Pubertal Stage",
+    title = "Distribution of Relative Pubertal Stage"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  ) 
+relpub_dist
+```
+
+
+```{r}
+dev_dist <- 
+  cowplot::plot_grid(
+    tanner_dist, 
+    age_dist,
+    relpub_dist,
+    labels = c('A', 'B', 'C'), 
+    label_size = 8
+    )
+ggsave("tanner_age_relpub_dist.png", dev_dist, width = 6, height = 4)
+```
+
+
+

@@ -1,0 +1,349 @@
+---
+title: "3_usable_ema_emo_data"
+author: "Jackie"
+date: "04/13/22"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+---
+
+This script wrangles MW subjctive emo data for further analysis
+
+# Loading libraries
+
+```{r libraries, message=FALSE}
+library(tidyverse)
+library(foreign)
+library(haven)
+library(readxl)
+library(lubridate)
+library(lmerTest)
+library(psych)
+```
+
+# Read in data
+
+## MW EMO data
+
+> Reading in usable sleep data (>=3 days of data)
+
+```{r read mw sleep, message=FALSE}
+emo_mw_usable_fp <- "~/Dropbox/JSK_SC/EMA/2_daily_emo_usable_data.csv"
+
+emo_mw_usable <-
+  read_csv(emo_mw_usable_fp) %>%
+  mutate(
+    ELS_ID = as.numeric(ELS_ID),
+    ELS_ID = as.character(ELS_ID),
+    ELS_ID = as.factor(ELS_ID)
+  ) %>%
+  dplyr::select(-c(email, device_ID))
+```
+## Summary sheet
+
+```{r}
+sum_sheet <- "~/Dropbox/JSK_SC/curating_data/3_actigraphy_ema_data_summary.csv"
+sum_sheet_df <- 
+  read_csv(sum_sheet) %>%
+  mutate(
+    ELS_ID = factor(ELS_ID)
+  ) %>%
+  dplyr::select(ELS_ID, simiul_ahc_t3, simul_ahc_t4, starts_with("use")) %>%
+  mutate(
+   simul =
+      ifelse(simiul_ahc_t3 == "yes" | simul_ahc_t4 == "yes", "1", "0")
+  ) %>%
+  filter(simul == "1")
+```
+
+### cleaning variable names
+
+```{r}
+emo_mw_usable_clean <-
+  emo_mw_usable %>%
+  dplyr::rename(
+    Daily_Sad = 
+      `Since the last prompt, please indicate the extent to which you felt sad`,
+    Daily_Annoyed.Angry = 
+      `Since the last prompt, please indicate the extent to which you felt annoyed/angry`,
+    Daily_Grouchy.Cranky =
+      `Since the last prompt, please indicate the extent to which you felt grouchy/cranky`,
+    Daily_Worried =
+      `Since the last prompt, please indicate the extent to which you felt worried`,
+    Daily_Anxious =
+      `Since the last prompt, please indicate the extent to which you felt anxious`,
+    Daily_Happy =
+      `Since the last prompt, please indicate the extent to which you felt happy`,
+    Daily_Cheerful =
+      `Since the last prompt, please indicate the extent to which you felt cheerful`,
+    Daily_Excited =
+      `Since the last prompt, please indicate the extent to which you felt excited`,
+    Daily_Energetic =
+      `Since the last prompt, please indicate the extent to which you felt energetic`,
+    Daily_Bored =
+      `Since the last prompt, please indicate the extent to which you felt bored`,
+    Daily_Want_Others =
+      `Since the last prompt, please indicate the extent to which you want to be with other people`,
+    Daily_Want_Alone =
+      `Since the last prompt, please indicate the extent to which you want to be alone`,
+    Social_Context =
+      `Right now, who are you with?`,
+    Face_to_Face_Convo =
+      `Right now, are you having a face-to-face conversation?`,
+    Digital_Convo =
+      `Right now, are you having a real-time digital (phone, text, Facebook, video) conversation?`
+  ) %>%
+  mutate(
+    Social_Context = factor(Social_Context),
+    Face_to_Face_Convo = factor(Face_to_Face_Convo),
+    Digital_Convo = factor(Digital_Convo),
+    Social_Context_rec =
+      recode_factor(
+        Social_Context,
+        "alone" = "alone_only",
+        "alone,strangers" = "alone_or_unknown_others",
+        "strangers,alone" = "alone_or_unknown_others",
+        "alone,acquaintance(s)" = "alone_or_semiknown_others",
+        "acquaintance(s),alone" = "alone_or_semiknown_others",
+        "acquaintance(s),strangers" = "semiknown_or_unknown_others",
+        "strangers,acquaintance(s)" = "semiknown_or_unknown_others",
+        "acquaintance(s)" = "semiknown_others",
+        "strangers" = "unknown_others"
+        ),
+    Social_Context_rec = as.character(Social_Context_rec)
+  ) %>%
+  mutate(
+    Social_Context_rec2 = NA,
+    Social_Context_rec2 =
+      ifelse(
+        str_detect(Social_Context_rec, "_"),
+        Social_Context_rec,
+        "with_known_others"        
+      ),
+    Social_Context_rec2 = factor(Social_Context_rec2)
+    ) %>%
+  dplyr::select(-Social_Context_rec)
+```
+
+### parsing dates
+
+```{r parsing dates}
+emo_mw_usable_clean <-
+  emo_mw_usable_clean %>%
+  mutate(
+    emo_trigger_date = dmy(emo_trigger_date),
+    emo_survey_start_date = dmy(emo_survey_start_date)
+  )
+```
+
+### creating day and week variables
+
+```{r}
+library(lubridate)
+# creating day and week variables
+emo_mw_usable_clean_day <-
+  emo_mw_usable_clean %>%
+  mutate(
+    day = day(emo_trigger_date),
+    wday = lubridate::wday(emo_trigger_date, label = TRUE, abbr = TRUE),
+    ELS_ID = factor(ELS_ID)
+  ) 
+
+# day num
+emo_mw_usable_clean_dayorder  <-
+  emo_mw_usable_clean_day %>%
+  dplyr::group_by(ELS_ID) 
+
+emo_mw_usable_clean_dayorder<- emo_mw_usable_clean_dayorder[order(emo_mw_usable_clean_dayorder$ELS_ID), ]
+```
+
+### wkday or wkend
+
+```{r}
+emo_mw_usable_clean_dayorder2 <-
+  emo_mw_usable_clean_dayorder %>%
+  mutate(
+    week =
+      ifelse(
+        wday == "Sun" |
+          wday == "Sat",
+        "wkend",
+        "wkday"
+      )
+  ) 
+```
+
+
+## merging with  summary sheet
+```{r}
+emo_merge <-
+  left_join(
+    emo_mw_usable_clean_dayorder2,
+    sum_sheet_df,
+    by = "ELS_ID"
+  )
+
+emo_merge2 <-
+  emo_merge %>%
+  filter(simul == "1")
+
+emo_merge3 <-
+  emo_merge2 %>%
+  mutate(
+    use_ema_date_t3 = mdy(use_ema_date_t3),
+    use_ema_date_t4 = mdy(use_ema_date_t4),
+    num_of_days_btwn_t3 =
+      abs((use_ema_date_t3 %--% emo_survey_start_date)/ddays(1)),
+    num_of_days_btwn_t4 =
+      abs((use_ema_date_t4 %--% emo_survey_start_date)/ddays(1)),
+    num_of_days_btwn =
+      ifelse(
+        is.na(num_of_days_btwn_t3),
+        num_of_days_btwn_t4,
+        num_of_days_btwn_t3
+      )
+    ) %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::mutate(
+    startdate = min(emo_trigger_date),
+    dayorder = abs((emo_trigger_date %--% startdate)/ddays(1))
+  ) %>%
+  relocate(startdate, .after = emo_trigger_date) %>%
+  relocate(dayorder, .after = startdate) %>%
+  mutate(
+    timept = ifelse(!is.na(simiul_ahc_t3), "T3", "T4")
+  )
+
+emo_merge4 <-
+  emo_merge3 %>%
+  filter(
+    dayorder < 15
+  ) %>% # now max is 14 days
+  dplyr::select(-c(num_of_days_btwn_t3, num_of_days_btwn_t4, starts_with("use"), simiul_ahc_t3, simul_ahc_t4))
+
+emo_merge5 <-
+  emo_merge4 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::mutate(
+    emo_num_resp = n(),
+    emo_rr = emo_num_resp/42
+  )
+
+```
+
+### summmary
+
+```{r}
+emo_merge5 %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(
+    n = n()
+  ) # 106 subjects
+
+write_csv(emo_merge5, "simul_ema_EMO_subjs.csv")
+```
+
+# Data viz
+
+> for those with simulataneous ema and actigraphy, looking at happy and sad just as an example of what we would expect 
+
+
+```{r viz sleep sat and emo}
+emo_merge5 %>%
+  ggplot(
+    aes(dayorder, scale(Daily_Sad), group = ELS_ID)
+    ) +
+  geom_line(color = "blue") +
+  geom_line(aes(x = dayorder, y = scale(Daily_Happy), group = ELS_ID), color = "pink") +
+  facet_wrap(~ELS_ID) +
+  scale_x_continuous(limits = c(1,15)) +
+  theme_classic() +
+  theme(
+  strip.text.x = element_blank(),
+  axis.title.y = element_text(size = 10)
+  ) +
+  labs(
+    x = "Day",
+    y = "Sleep Satisfaction (dark blue), Daily Sadness (pink)",
+    title = "Trajectories of Self-Reported Sadness and Happiness"
+    )
+
+ggsave("daily_mw_emo_example_traj.png", width = 7, height = 5.5, dpi = 400)
+```
+
+
+### distribution of weekday vs. weekend and association with sadness and happiness
+
+```{r}
+level_key <- c(wkday = "wkday", wkend = "wkend")
+emo_merge6 <-
+  emo_merge5 %>%
+  mutate(
+    week = factor(week),
+    week =  recode_factor(week,!!!level_key),
+    dayorder = as.numeric(dayorder)
+  )
+
+# summary
+emo_merge6 %>%
+  dplyr::group_by(ELS_ID, week) %>%
+  dplyr::summarise(
+    n = n()
+  )
+
+
+emo_merge6 %>%
+  drop_na(Daily_Sad) %>%
+  drop_na(Daily_Happy) %>%
+  drop_na(week) %>%
+  ggplot(
+    aes(
+      x = dayorder, 
+      y = scale(Daily_Sad)
+    )
+  ) +
+  geom_line(aes(group = ELS_ID), color = "blue", alpha = .5) +
+  geom_smooth(se=FALSE, size = 2, colour = "darkblue") +
+  geom_line(aes(x = dayorder, y = scale(Daily_Happy), group = ELS_ID), color = "darkgoldenrod2", alpha = .5) +
+  geom_smooth(aes(x = dayorder, y = scale(Daily_Happy)), size = 2, se = FALSE, colour = "darkgoldenrod2") +
+  facet_wrap(~week) +
+  theme_classic() +
+  scale_x_continuous(
+    limits = c(1, 14),                    
+    breaks = seq(1, 14, 1)
+    ) +
+  labs(
+    x = "Day",
+    y = "Sad = blue, Happy= gold"
+  )
+ggsave("sleepsat_and_hours_byDay_byWkdayWkend.png", width = 7, height = 5)
+
+```
+
+#### tests
+```{r}
+# sad level differences by weekday/wkend 
+summary(lmer(scale(Daily_Sad) ~ scale(dayorder) +factor(week) + (1 + scale(dayorder)|ELS_ID), data = emo_merge6))
+## no effect of weekday/weekend
+
+# sleep duration differences by weekday/wkend 
+summary(lmer(scale(Daily_Happy) ~ scale(dayorder) + factor(week) + (1 + scale(dayorder)|ELS_ID), data = emo_merge6))
+##  happier on weekends compared to weekdays
+```
+
+### write
+
+```{r}
+write_csv(emo_merge6, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv")
+```
+
+### timept data
+```{r}
+emo_merge6_red <-
+  emo_merge6 %>%
+  distinct(ELS_ID)
+```
+
+
