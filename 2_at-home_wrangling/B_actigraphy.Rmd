@@ -135,7 +135,7 @@ sleep_act_usable_clean2 <-
     drop = 
       ifelse(
         str_detect(Subject_ID_Timepoint, "085-T3") &
-          str_detect(data_start_date, "7/19/19"),
+          str_detect(data_start_date, "X/XX/XX"),
         "drop",
         drop
       )
