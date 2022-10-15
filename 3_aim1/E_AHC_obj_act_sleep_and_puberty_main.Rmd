@@ -32,7 +32,7 @@ library(lmerTest)
 ```{r,message=FALSE, filepaths}
 
 # full AHC sample with pubertal and demographic info
-pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
 
 ahc_obj_df <-
   read_csv(pub_demo_act_ema_comb_fp) %>%

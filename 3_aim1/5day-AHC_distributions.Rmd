@@ -1,7 +1,7 @@
 ---
 title: "AHC_distributions"
 author: "Jackie"
-date: "03/27/22"
+date: "07/25/22"
 output: 
   html_document:
     toc: true
@@ -28,7 +28,7 @@ library(lmerTest)
 ```{r filepaths}
 
 # full AHC sample with pubertal and demographic info
-pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts_revised/3_aim1/pub_ema_act_merged.csv"
 
 ahc_df <-
   read_csv(pub_demo_act_ema_comb_fp) %>%
@@ -134,7 +134,7 @@ hrs_dist
 
 dailysleep_summary <-
   ahc_df %>%
-  # filter(high_school == "1") %>%
+  filter(high_school == "1") %>%
   dplyr::summarise(
     dailysleep_sat_average = mean(dailysleep_sat_mean),
     dailysleep_sat_disp = sd(dailysleep_sat_mean),
@@ -158,54 +158,14 @@ dailysleep_summary <-
     obj_hrs_max = max(sleep_time_hrs_mean, na.rm = TRUE)    
   )
 dailysleep_summary
-getmode(ahc_df$dailysleep_sat_mean) #  51
 median(ahc_df$dailysleep_sat_mean) # 62.429
-getmode(ahc_df$dailysleep_hrs_mean) # 7
 median(ahc_df$dailysleep_hrs_mean) # 7.4
 pub_mw_finalcmep <-
   ahc_df %>%
   drop_na(cmep_total)
-getmode(pub_mw_finalcmep$cmep_total) # 23
-median(pub_mw_finalcmep$cmep_total) # 26.5
-getmode(ahc_df$efficiency_mean) # 80.63
-median(ahc_df$efficiency_mean) #  82.514
-getmode(ahc_df$sleep_time_hrs_mean) # 7
-median(ahc_df$sleep_time_hrs_mean) # 6.8012
-
-# Circadian Pref Categories
-# Higher scores indicate greater preferences toward morningness. Diaz-Morales and colleagues [2007] suggest cutoffs at the 20th and 80th percentiles:
-quantile(pub_mw_finalcmep$cmep_total) # default
-
-quantile(pub_mw_finalcmep$cmep_total, probs = c(0.20, 0.80))
-# 20th percentile: 15-21 (eveningness)
-# 80th percentile: 30-39 (morningness)
-# Neither: 22-29 (neither)
-ahc_df_sum_cmep_cat <-
-  ahc_df %>%
-  dplyr::mutate(
-    cmep_type =
-      ifelse(
-        cmep_total >= 15 & cmep_total <= 21, 
-        "eveningness",
-        NA
-      ),
-    cmep_type =
-      ifelse(
-        cmep_total >= 22 & cmep_total <= 29,
-        "neither",
-        cmep_type
-      ),
-    cmep_type = 
-      ifelse(
-        cmep_total >=30 & cmep_total <= 39,
-        "morningness",
-        cmep_type
-      )
-  ) %>%
-  dplyr::group_by(cmep_type) %>%
-  dplyr::summarise(
-    n = n()
-  )
+median(pub_mw_finalcmep$cmep_total) # 27
+median(ahc_df$efficiency_mean) #  82.2294
+median(ahc_df$sleep_time_hrs_mean) # 6.827473
 ```
 
 ```{r, message=FALSE}
@@ -222,6 +182,8 @@ sleep_all_dist <-
     )
 ggsave("sleep_all_dist.png", sleep_all_dist, width = 7, height = 4)
 ```
+
+
 
 ### Correlation among sleep and other meaures
 
@@ -343,13 +305,21 @@ summary(rel_pub_mod)
 ahc_df_cent <-
   ahc_df_cent %>% 
   add_residuals(rel_pub_mod, var = "rel_pub_stg")
+
+# pubertal tempo
+ahc_df_cent_2 <-
+  ahc_df_cent %>%
+  mutate(
+    tempo_interval = Age_ahc - Age.T1,
+    tempo = (tanner_average_ahc - tanner_average.T1)/tempo_interval
+  )
 ```
 
 
 ```{r}
 relpub_dist <- 
-  ahc_df_cent %>%
-  filter(Age_ahc < 19) %>%
+  ahc_df_cent_2 %>%
+  filter(high_school == 1) %>%
   ggplot(
     aes(x = rel_pub_stg)
   ) +
@@ -368,6 +338,28 @@ relpub_dist <-
 relpub_dist
 ```
 
+```{r}
+tempo_dist <- 
+  ahc_df_cent_2 %>%
+  filter(high_school == 1) %>%
+  ggplot(
+    aes(x = tempo)
+  ) +
+  geom_histogram(color = "black", alpha = .5, bins =21) +
+  theme_classic() +
+  labs(
+    x = "Pubertal Tempo",
+    title = "Distribution of Pubertal Tempo"
+  ) + 
+  theme(
+    axis.text = element_text(size = 10, angle = 30, hjust = 1),
+    axis.title = element_text(size = 10),
+    title = element_text(size = 10),
+    plot.title = element_text(size = 10)
+  ) 
+tempo_dist
+```
+
 
 ```{r}
 dev_dist <- 
@@ -375,7 +367,8 @@ dev_dist <-
     tanner_dist, 
     age_dist,
     relpub_dist,
-    labels = c('A', 'B', 'C'), 
+    tempo_dist,
+    labels = c('A', 'B', 'C', 'D'), 
     label_size = 8
     )
 ggsave("tanner_age_relpub_dist.png", dev_dist, width = 6, height = 4)

@@ -51,7 +51,7 @@ mylag <- function(x,lag) {
 
 
 ```{r, message=FALSE}
-emadffp <- "~/Dropbox/JSK_SC/_scripts/4_aim2/ema_and_act_merge.csv"
+emadffp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/4_aim2/ema_and_act_merge.csv"
 emadf <- read_csv(emadffp) %>%
   dplyr::filter(high_school == "1") %>%
   dplyr::select(
@@ -321,7 +321,7 @@ HLM_summary(mlm_l2_pa_rs_subj_sleep)
 day.means9_red <-
   day.means9 %>%
   dplyr::select(
-    ELS_ID, dayorder, trigger_tod_order, tanner_average_ahc_z, neg_total_sqrt, pos_total, DailySleep_sat.L1, DailySleep_sat.L2.c, PA.L1, PA.L2.c, NAsqrt.L1, NAsqrt.L2.c
+    ELS_ID, dayorder, trigger_tod, trigger_tod_order, tanner_average_ahc_z, neg_total_sqrt, pos_total, DailySleep_sat.L1, DailySleep_sat.L2.c, PA.L1, PA.L2.c, NAsqrt.L1, NAsqrt.L2.c
   )
 # Neg Affect 
 mlm_l3_na_ri_subj_sleep_sat_pub <-
@@ -330,11 +330,13 @@ mlm_l3_na_ri_subj_sleep_sat_pub <-
     ) 
 mlm_l3_na_rs_subj_sleep_sat_pub <-
   lmer(
-    neg_total_sqrt ~ dayorder + trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z + DailySleep_sat.L2.c*tanner_average_ahc_z + PA.L1 + PA.L2.c + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9_red
+    neg_total_sqrt ~ dayorder +  trigger_tod_order*DailySleep_sat.L1*tanner_average_ahc_z + DailySleep_sat.L2.c*tanner_average_ahc_z + PA.L1 + PA.L2.c + (1 + trigger_tod_order | ELS_ID/dayorder), data = day.means9_red
     ) 
 
 anova(mlm_l3_na_ri_subj_sleep_sat_pub, mlm_l3_na_rs_subj_sleep_sat_pub)
+summary(mlm_l3_na_rs_subj_sleep_sat_pub)
 HLM_summary(mlm_l3_na_rs_subj_sleep_sat_pub)
+
 
 
 # Pos Affect
@@ -348,11 +350,49 @@ mlm_l3_pa_rs_subj_sleep_sat_pub <-
     ) 
 
 anova(mlm_l3_pa_ri_subj_sleep_sat_pub, mlm_l3_pa_rs_subj_sleep_sat_pub)
+summary(mlm_l3_pa_rs_subj_sleep_sat_pub)
 HLM_summary(mlm_l3_pa_rs_subj_sleep_sat_pub)
 
-library(sjPlot)
-library(sjstats)
 
-tab_model(mlm_l3_na_rs_subj_sleep_sat_pub, mlm_l3_pa_rs_subj_sleep_sat_pub, show.std = TRUE,  dv.labels = c("NA", "PA"), string.std_ci = "CI 95%", string.std.p = "p-value", col.order = c("std.est", "std.ci", "std.p"), pred.labels = c("Intercept", "day", "time-of-day", "DailySleepSat.State", "TannerStage", "DailySleepSat.Trait.c",  "PA.State", "PA.Trait", "DailySleepSat.State*time-of-day", "TannerStage*time-of-day", "DailySleepSat.State*TannerStage", "DailySleepSat.Trait.c*TannerStage", "DailySleepSat.State*TannerStage*time-of-day", "NA.State", "NA.Trait"), file = "affect_sleepsat_mod.doc")
+
+
+
+sjPlot::tab_model(mlm_l3_na_rs_subj_sleep_sat_pub, mlm_l3_pa_rs_subj_sleep_sat_pub, dv.labels = c("NA", "PA"),  string.std = "std.Beta", string.std_ci = "CI 95%", string.std.p = "p-value", pred.labels = c("Intercept", "day", "time-of-day", "DailySleepSat.State", "TannerStage", "DailySleepSat.Trait.c",  "PA.State", "PA.Trait", "DailySleepSat.State*time-of-day", "TannerStage*time-of-day", "DailySleepSat.State*TannerStage", "DailySleepSat.Trait.c*TannerStage", "DailySleepSat.State*TannerStage*time-of-day", "NA.State", "NA.Trait"), col.order = c("std.est", "std.ci", "p"), file = "affect_sleepsat_mod.doc")
+
+
+```
+
+# Visualization
+
+```{r}
+plot_model(mlm_l3_na_rs_subj_sleep_sat_pub, type = "pred", show.data = TRUE)
+plot_model(mlm_l3_pa_rs_subj_sleep_sat_pub, type = "pred", show.data = TRUE)
+
+day.means9_red %>%
+  mutate(
+    trigger_tod_name = fct_relevel(trigger_tod, "Morning", "Afternoon", "Evening")
+  ) %>%
+  ggplot(
+    aes(x = DailySleep_sat.L1, y = neg_total_sqrt, group = ELS_ID), legend = FALSE
+  ) +
+  geom_smooth(method = "lm", se = FALSE, lty = 1, size = .5, color = "gray") +
+  geom_smooth(aes(group = 1), method = "lm", se = FALSE, fullrange=FALSE, lty = 1, size = 2, color = "blue") +
+  facet_wrap(~trigger_tod_name) + 
+  theme_classic() +
+ # scale_x_continuous(breaks = seq(from = -4, to = 4, by = .5)) +
+ # scale_y_continuous(breaks = seq(from = -2, to = 2, by = .5)) +
+  labs(
+    x = "Subjective Sleep Satisfaction (Relative to Person-Mean)",
+    y = "Next Day Negative Affect",
+    title = "Within-Person Association Plot\nSubject Sleep Satisfaction & Negative Affect in the Morning, Afternoon, and Evening"
+  ) +
+  theme(
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    plot.title = element_text(size = 8, hjust = 0.5)
+  )
+ggsave("within-pers_lastnightsleep_and_next-day-affect.png", width = 4.5, height = 3)
+
+
 ```
 

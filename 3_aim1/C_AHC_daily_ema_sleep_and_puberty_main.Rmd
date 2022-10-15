@@ -30,7 +30,7 @@ library(lmerTest)
 ```{r,message=FALSE, filepaths}
 
 # full AHC sample with pubertal and demographic info
-pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
 
 ahc_subj_df <-
   read_csv(pub_demo_act_ema_comb_fp) %>%
@@ -168,6 +168,131 @@ bayes_relpub <- regressionBF(
 
 ```
 
+#### Adding potential covariates to asseess model fit
+```{r}
+
+ahc_subj_centbmi <-
+  ahc_subj_cent %>%
+  drop_na(BMI_ahc)
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_centbmi)
+pubsleep1 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + BMI_ahc_z, data = ahc_subj_centbmi)
+A <- logLik(pubsleep)
+B <- logLik(pubsleep1)
+anova(pubsleep, pubsleep1)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+# covariate does not increase model fit
+
+ahc_subj_centhouse <-
+  ahc_subj_cent %>%
+  drop_na(Household_Income_ahc)
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_centhouse)
+pubsleep2 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + Household_Income_ahc, data = ahc_subj_centhouse)
+anova(pubsleep, pubsleep2) # covariate does not increase model fit
+A <- logLik(pubsleep)
+B <- logLik(pubsleep2)
+anova(pubsleep, pubsleep2)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_cent)
+pubsleep3 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + sleep_rr_z, data = ahc_subj_cent)
+anova(pubsleep, pubsleep3) # covariate does not increase model fit
+A <- logLik(pubsleep)
+B <- logLik(pubsleep3)
+anova(pubsleep, pubsleep3)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+ahc_subj_centels <-
+  ahc_subj_cent %>%
+  drop_na(sumsev_type_t1)
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_centels)
+pubsleep4 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + sumsev_type_z, data = ahc_subj_centels)
+anova(pubsleep, pubsleep4) # covariate does not increase model fit
+A <- logLik(pubsleep)
+B <- logLik(pubsleep4)
+anova(pubsleep, pubsleep4)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_cent)
+pubsleep5 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + Sex, data = ahc_subj_cent)
+anova(pubsleep, pubsleep5) # covariate does not increase model fit
+A <- logLik(pubsleep)
+B <- logLik(pubsleep5)
+anova(pubsleep, pubsleep5)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_cent)
+pubsleep6 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + COVID, data = ahc_subj_cent)
+anova(pubsleep, pubsleep6) # covariate does not increase model fit
+A <- logLik(pubsleep)
+B <- logLik(pubsleep6)
+anova(pubsleep, pubsleep6)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+ahc_subj_centasq <-
+  ahc_subj_cent %>%
+  drop_na(ASQ_total)
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_centasq)
+pubsleep7 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + ASQ_total_z, data = ahc_subj_centasq)
+anova(pubsleep, pubsleep7) # covariate  slightly increases model fit, but was included anyway as a covariate bc associated with DV
+A <- logLik(pubsleep)
+B <- logLik(pubsleep7)
+anova(pubsleep, pubsleep7)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+
+ahc_subj_centasqcmep <-
+  ahc_subj_cent %>%
+  drop_na(ASQ_total) %>%
+  drop_na(cmep_total)
+pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_centasqcmep)
+pubsleep8 <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + ASQ_total_z + cmep_z, data = ahc_subj_centasqcmep)
+anova(pubsleep, pubsleep8) # covariate   increases model fit, but was included anyway as a covariate bc associated with DV
+A <- logLik(pubsleep)
+B <- logLik(pubsleep8)
+anova(pubsleep, pubsleep8)
+(teststat <- -2 * (as.numeric(A)-as.numeric(B)))
+(p.val <- pchisq(teststat, df = 1, lower.tail = FALSE))
+
+```
+
+### Group Analysis: early/mid vs late/post
+
+```{r}
+ahc_subj_cent2 <-
+  ahc_subj_cent %>%
+  dplyr::mutate(
+    pub_cat =
+      ifelse(
+        tanner_average_ahc < 4, "earlytomid",
+        "latetopost"
+      ),
+    pub_cat = factor(pub_cat)
+  )
+contrasts(ahc_subj_cent2$pub_cat)
+
+grouptest <- lm(mw_dailysleep_sat_z ~ pub_cat, data = ahc_subj_cent2)
+summary(grouptest)
+
+# CI
+ci_grouptest = Boot(grouptest, coef,
+method='case', R=1000)
+boot_confint_ci_grouptest <- confint(ci_grouptest, type='norm')
+#                       2.5 %    97.5 %
+# tanner_average_ahc_z -1.217527 -0.12654
+
+# Bayes Factor
+bayes_grouptest <- generalTestBF(
+  formula = mw_dailysleep_sat_z ~ pub_cat, data = ahc_subj_cent2
+) # 2.7792 
+```
+
 ### Repeating with Age
 
 ```{r}
@@ -204,37 +329,38 @@ p1 <-
   ggplot(
     aes(x=tanner_average_ahc_z, y=mw_dailysleep_sat_z, color = "Tanner stage")
   ) +
-  geom_point(size = 2, alpha = .5) +
+  geom_point(size = 3, alpha = .5) +
   geom_point(
-    aes(x = Age_ahc_z, y = mw_dailysleep_sat_z, color = "Age"), size = 2, alpha = .5
+    aes(x = Age_ahc_z, y = mw_dailysleep_sat_z, color = "Age"), size = 3, alpha = .5
   ) +
   geom_abline(
     intercept = agesleep_int,
     slope = agesleep_slp,
-    size = 2,
+    size = 3,
     color = "red"
   ) +
   geom_abline(
     intercept = pubsleep_int, 
     slope = pubsleep_slp,
-    size=2,
+    size=3,
     color = "blue"
     ) +
   labs(
     x = "Development Stage (z-scored)",
     y = "Averaged Daily Sleep Satisfaction (z-scored)",
     title = "Developmental Stage and Averaged Daily Sleep Satisfaction",
-    color = "Developmental Stage"
+    color = "Developmental Index"
   ) +
   scale_color_manual(values = colors) +
   theme_classic() +
-  theme(plot.title = element_text(size = 9),
-        axis.text.x = element_text(size = 9),
-        axis.text.y = element_text(size = 9),
-        axis.title.x = element_text(size = 9),
-        axis.title.y = element_text(size = 9))
+  theme(plot.title = element_text(size = 12, hjust = 0.5),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12),
+        axis.title.x = element_text(size = 12),
+        axis.title.y = element_text(size = 12))
 p1
-ggsave("dev_stage_daily_sleep_sat.png", p1, width = 6, height = 5)
+
+ggsave("dev_stage_daily_sleep_sat.tiff", p1, width = 6, height = 5)
 ```
 
 ### Controlling for perceived stress severity and circadian preference
@@ -357,7 +483,7 @@ bayes_pubsleepdur <- regressionBF(
 
 ```{r}
 # full AHC sample with pubertal and demographic info LONG FORM
-pub_demo_act_ema_comb_long_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged_long.csv"
+pub_demo_act_ema_comb_long_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged_long.csv"
 
 ahc_long_df <-
   read_csv(pub_demo_act_ema_comb_long_fp) %>%
@@ -367,6 +493,38 @@ ahc_long_df <-
     ) %>%
   as_tibble()
 ```
+
+
+```{r}
+ahc_dist_days <-
+  ahc_long_df %>%
+  drop_na(tanner_average_ahc) %>%
+  dplyr::select(ELS_ID, respnumber) %>%
+  distinct() %>%
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::summarise(n = n())
+
+ahc_rr_dist <- 
+  ahc_dist_days %>%
+  ggplot(
+    aes(x = n)
+  ) +
+  geom_histogram(color = "black", alpha = .5, binwidth = 1) +
+  theme_classic() +
+  labs(
+    x = "Usable Days",
+    title = "Distribution of Usable Days from Actigraphy and EMA"
+  ) + 
+  scale_x_continuous(breaks = c(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)) +
+  scale_y_continuous(breaks = c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14)) + 
+  theme(
+    axis.text = element_text(size =10, angle = 30, hjust = 1),
+    axis.title.x = element_text(size = 10)
+  )
+ahc_rr_dist
+ggsave("sleep_rr_dist.tiff", ahc_rr_dist, width = 7, height = 6)
+```
+
 
 #### centering based on this sample
 I standardized tanner stage, age at tanner assessment, and bmi within each sex

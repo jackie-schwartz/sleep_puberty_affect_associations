@@ -30,7 +30,7 @@ library(psych)
 > Reading in usable sleep data (>=3 days of data)
 
 ```{r read mw sleep, message=FALSE}
-sleep_mw_usable_fp <- "~/Dropbox/JSK_SC/EMA/2_daily_sleep_usable_data.csv"
+sleep_mw_usable_fp <- "~/Dropbox/JSK_SC/EMA/data_3_days_usability/2_daily_sleep_usable_data.csv"
 
 sleep_mw_usable <-
   read_csv(sleep_mw_usable_fp) %>%
@@ -304,7 +304,7 @@ summary(lmer(scale(DailySleep_hrs_rec) ~ scale(respnumber) + factor(week) + (1 +
 ### write
 
 ```{r}
-write_csv(sleep_merge5, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv")
+write_csv(sleep_merge5, "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv")
 ```
 
 ### Averaging over the two weeks to obtain representative estimates for these constructs
@@ -327,6 +327,6 @@ mw_sleep_red <-
 ### write
 
 ```{r}
-write_csv(mw_sleep_red, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/EMA_daily_sleep_data_reduced.csv")
+write_csv(mw_sleep_red, "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/EMA_daily_sleep_data_reduced.csv")
 ```
 

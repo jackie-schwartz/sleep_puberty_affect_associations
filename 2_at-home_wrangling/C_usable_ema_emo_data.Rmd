@@ -30,7 +30,7 @@ library(psych)
 > Reading in usable sleep data (>=3 days of data)
 
 ```{r read mw sleep, message=FALSE}
-emo_mw_usable_fp <- "~/Dropbox/JSK_SC/EMA/2_daily_emo_usable_data.csv"
+emo_mw_usable_fp <- "~/Dropbox/JSK_SC/EMA/data_3_days_usability/2_daily_emo_usable_data.csv"
 
 emo_mw_usable <-
   read_csv(emo_mw_usable_fp) %>%
@@ -336,7 +336,7 @@ summary(lmer(scale(Daily_Happy) ~ scale(dayorder) + factor(week) + (1 + scale(da
 ### write
 
 ```{r}
-write_csv(emo_merge6, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv")
+write_csv(emo_merge6, "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv")
 ```
 
 ### timept data

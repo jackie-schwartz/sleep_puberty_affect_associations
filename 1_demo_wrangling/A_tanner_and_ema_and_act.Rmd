@@ -23,31 +23,31 @@ library(lubridate)
 # Reading in data from 2_demo_cleaning
 
 ```{r}
-dem_plus_tan_t1_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_t1.csv"
+dem_plus_tan_t1_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/1_demo_wrangling/dem_plus_tan_t1.csv"
 dem_plus_tan_t1 <- 
   read_csv(dem_plus_tan_t1_fp) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   )
 
-dem_plus_tan_t3_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_t3_act_ema.csv"
+dem_plus_tan_t3_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/1_demo_wrangling/dem_plus_tan_t3_act_ema.csv"
 dem_plus_tan_t3 <- 
   read_csv(dem_plus_tan_t3_fp) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%
-  dplyr::select(ELS_ID, sex, simiul_ahc_t3, interval_mw_and_act_t3, tanner_date.T3, interval_btwn_ema_and_tanner, interval_btwn_act_and_tanner, Age.T3, BMI.T3, tanner_average.T3, Contraceptive.T3:Household_Income.T3) %>%
+  dplyr::select(ELS_ID, sex, simiul_ahc_t3, interval_mw_and_act_t3, tanner_date.T3, interval_btwn_ema_and_tanner, interval_btwn_act_and_tanner, Age.T3, BMI.T3, tanner_average.T3, tanner_female_breasts.T3:tanner_male_testes.T3, Contraceptive.T3:Household_Income.T3) %>%
   mutate(
     timept_t3 = "T3"
   )
 
-dem_plus_tan_t4_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_t4_act_ema.csv"
+dem_plus_tan_t4_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/1_demo_wrangling/dem_plus_tan_t4_act_ema.csv"
 dem_plus_tan_t4 <- 
   read_csv(dem_plus_tan_t4_fp) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%
-  dplyr::select(ELS_ID, sex, simul_ahc_t4, interval_mw_and_act_t4, tanner_date.T4, interval_btwn_ema_and_tanner, interval_btwn_act_and_tanner, Age.T4, BMI.T4, tanner_average.T4, Sexual_Orientation.T4, Gender.T4, Gender_other.T4, Primary_Parent_Education.T4:Household_Income.T4) %>%
+  dplyr::select(ELS_ID, sex, simul_ahc_t4, interval_mw_and_act_t4, tanner_date.T4, interval_btwn_ema_and_tanner, interval_btwn_act_and_tanner, Age.T4, BMI.T4, tanner_average.T4, tanner_female_breasts.T4:tanner_male_testes.T4, Sexual_Orientation.T4, Gender.T4, Gender_other.T4, Primary_Parent_Education.T4:Household_Income.T4) %>%
   mutate(
     timept_t4 = "T4"
   )
@@ -65,6 +65,10 @@ dem_plus_tan_t3_clean <-
     Age_ahc = Age.T3,
     BMI_ahc = BMI.T3,
     tanner_average_ahc = tanner_average.T3,
+    tanner_female_breasts = tanner_female_breasts.T3,
+    tanner_female_pubhair = tanner_female_pubhair.T3,
+    tanner_male_pubhair = tanner_male_pubhair.T3,
+    tanner_male_testes = tanner_male_testes.T3,
     Contraceptive_use = Contraceptive.T3,
     Allergy_Antibiotic_use = Allergy_Antibiotic.T3,
     Corticosteroid_Use = Corticosteroid_Use.T3,
@@ -82,6 +86,11 @@ dem_plus_tan_t4_clean <-
     simul_ahc = simul_ahc_t4,
     interval_ema_and_act = interval_mw_and_act_t4,
     tanner_date_ahc = tanner_date.T4,
+    tanner_average_ahc = tanner_average.T4,
+    tanner_female_breasts = tanner_female_breasts.T4,
+    tanner_female_pubhair = tanner_female_pubhair.T4,
+    tanner_male_pubhair = tanner_male_pubhair.T4,
+    tanner_male_testes = tanner_male_testes.T4,
     Age_ahc = Age.T4,
     BMI_ahc = BMI.T4,
     tanner_average_ahc = tanner_average.T4,
@@ -153,7 +162,8 @@ cmept4_clean <-
   cmept4 %>%
   dplyr::mutate(
     cmep_total.T4 = rowSums(cmept4[,(varscmept4)])
-  )
+  ) %>%
+  drop_na(cmep_1.T4)
 
 ```
 
@@ -183,7 +193,7 @@ dem_plus_tan_ahc_merge2 <-
     cmept3_clean,
     by = "ELS_ID"
   ) %>%
-  select(-match_sex, -sex) %>%
+  dplyr::select(-match_sex, -sex) %>%
   dplyr::rename(sex = Child_Sex.T1)
 
 dem_plus_tan_ahc_merge3 <-
@@ -195,7 +205,9 @@ dem_plus_tan_ahc_merge3 <-
   dplyr::mutate(
     cmep_total = ifelse(ELS_ID == "6" | ELS_ID == "17" | ELS_ID == "38" | ELS_ID == "101" | ELS_ID == "192", cmep_total.T4, cmep_total.T3)
   ) %>%
-  mutate(ELS_ID = factor(ELS_ID))
+  mutate(ELS_ID = factor(ELS_ID)) %>%
+  dplyr::select(-cmep_total.T3, -cmep_total.T4, -cmep_date.T3, -cmep_date.T4) %>%
+  distinct()
 ```
 
 
@@ -249,7 +261,7 @@ dem_plus_tan_ahc_merge5 <-
 
 dem_plus_tan_ahc_merge6 <-
   dem_plus_tan_ahc_merge5 %>%
-  dplyr::select(-c(cmep_date.T3, cmep_date.T4, cmep_total.T3, cmep_total.T4, ASQ_total.T3, ASQ_total.T4)) %>%
+  dplyr::select(-c(ASQ_total.T3, ASQ_total.T4)) %>%
   distinct()
 
 dups <-
@@ -280,7 +292,7 @@ dem_plus_tan_ahc_merge7 <-
 
 
 ## removing those in early puberty - should i keep this range?
-
+- decided to keep the range
 ```{r}
 table(dem_plus_tan_ahc_merge7$tanner_average_ahc)
 earlytan <- c(2, 2.5, 2.5, 2.5)
@@ -354,7 +366,7 @@ dem_plus_tan_ahc_merge10 <-
 ## Write df for next step
 
 ```{r}
-dem_plus_tan_ahc_merged_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_ahc_merged.csv"
+dem_plus_tan_ahc_merged_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/1_demo_wrangling/dem_plus_tan_ahc_merged.csv"
 write_csv(dem_plus_tan_ahc_merge10, dem_plus_tan_ahc_merged_fp)
 ```
 

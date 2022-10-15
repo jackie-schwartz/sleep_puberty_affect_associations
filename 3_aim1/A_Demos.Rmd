@@ -28,13 +28,13 @@ library(lmerTest)
 
 ```{r filepaths}
 ema_fp <-
-  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/EMA_daily_sleep_data_reduced.csv"
+  "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/EMA_daily_sleep_data_reduced.csv"
 
 act_fp <-
-  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv"
+  "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv"
 
 # full AHC sample with pubertal and demographic info
-pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/_scripts/1_demo_wrangling/dem_plus_tan_ahc_merged.csv"
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/1_demo_wrangling/dem_plus_tan_ahc_merged.csv"
 
 schooling_fp <- "~/Dropbox/JSK_SC/demographic/curated_sheets/ahc_full_sample_hs_data.csv"
 
@@ -228,12 +228,53 @@ write_csv(desc_all_demo_desc, "demographics_ahc_table.csv")
 
 ```
 
+## Frequencies of BMI
+
+```{r}
+bmi <-
+  pub_ema_and_act_timept %>%
+  drop_na(BMI_ahc) %>%
+  dplyr::mutate(
+   weightcat = 
+     ifelse((Age_ahc >= 13 & Age_ahc <= 14) & BMI_ahc > 25, "overweight", "normal"),
+    weightcat = 
+     ifelse((Age_ahc >= 15 & Age_ahc <= 16) & BMI_ahc > 27.5, "overweight", weightcat), 
+   weightcat = 
+     ifelse((Age_ahc > 16 & Age_ahc <= 17) & BMI_ahc > 28, "overweight", weightcat),   
+   weightcat = 
+     ifelse(Age_ahc >= 18 & BMI_ahc >= 29, "overweight", weightcat),      
+  )
+bmi %>%
+  dplyr::group_by(weightcat) %>%
+  dplyr::summarise(
+    n = n(),
+    perc = n/78
+  )
+
+# Correlation between BMI and Tanner (controlling for age)
+summary(lm(scale(BMI_ahc) ~ scale(tanner_average_ahc) + scale(Age_ahc), data = pub_ema_and_act_timept))
+```
+
+## Correlatiosn between breast/pubic hair and testes/pubic hair
+
+```{r}
+female_pub <-
+  pub_ema_and_act_timept %>%
+  dplyr::filter(sex == 2)
+
+male_pub <-
+  pub_ema_and_act_timept %>%
+  dplyr::filter(sex == 1)
+
+library(scipub)
+correltable(data = pub_ema_and_act_timept, vars = c("tanner_female_breasts", "tanner_female_pubhair", "tanner_male_pubhair", "tanner_male_testes"),tri="lower",html=FALSE)
+```
 
 ## Reading actigraphy and ema subj lists
 > These are those who were in the ahc summary sheet, with "yes" for having simulatenous data, and at least 3 days of usable data
 
 ```{r}
-act_sim_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/simul_actigraphy_subjs.csv"
+act_sim_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/simul_actigraphy_subjs.csv"
 act_sim <- 
   read_csv(act_sim_fp) %>%
   dplyr::mutate(
@@ -244,7 +285,7 @@ act_sim <-
     Actigraphy_num_days = n()
   )
 
-ema_sim_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/simul_ema_subjs.csv"
+ema_sim_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/simul_ema_subjs.csv"
 ema_sim <- 
   read_csv(ema_sim_fp) %>%
   dplyr::mutate(
@@ -294,15 +335,17 @@ write_csv(ahc_subj_lists2, "ahc_subject_list_simulataneous_and_usability.csv")
 
 ```
 
+
+
 ### Writign long files
 
 ```{r}
 # Long form fps
 ema_long_fp <-
-  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv"
+  "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/mw_daily_sleep_longform.csv"
 
 act_long_fp <-
-  "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv"
+  "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv"
 
 
 ema_long <- read_csv(ema_long_fp) %>%

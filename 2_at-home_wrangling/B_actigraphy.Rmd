@@ -30,7 +30,7 @@ library(psych)
 > Reading in usable sleep data (>=3 days of data)
 
 ```{r read act sleep, message=FALSE}
-sleep_act_usable_fp <- "~/Dropbox/JSK_SC/actigraphy/1_usable_actigraphy_data.csv"
+sleep_act_usable_fp <- "~/Dropbox/JSK_SC/actigraphy/data_3_days_usability/1_usable_actigraphy_data.csv"
 
 sleep_act_usable <-
   read_csv(sleep_act_usable_fp) %>%
@@ -135,7 +135,7 @@ sleep_act_usable_clean2 <-
     drop = 
       ifelse(
         str_detect(Subject_ID_Timepoint, "085-T3") &
-          str_detect(data_start_date, "X/XX/XX"),
+          str_detect(data_start_date, "7/19/19"),
         "drop",
         drop
       )
@@ -343,7 +343,7 @@ summary(lmer(scale(sleep_time_hrs) ~ scale(respnumber) + factor(week) + (1 |ELS_
 ### write
 
 ```{r}
-write_csv(sleep_act_usable_clean10, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv")
+write_csv(sleep_act_usable_clean10, "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/act_daily_sleep_longform.csv")
 ```
 
 ### Averaging over the two weeks to obtain representative estimates for these constructs
@@ -366,5 +366,5 @@ act_sleep_red <-
 ### write
 
 ```{r}
-write_csv(act_sleep_red, "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv")
+write_csv(act_sleep_red, "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/ACT_daily_sleep_data_reduced.csv")
 ```

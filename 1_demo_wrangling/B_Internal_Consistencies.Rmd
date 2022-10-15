@@ -53,7 +53,7 @@ asqt4 <-
     ) %>%
   dplyr::select(ELS_ID, starts_with("asq_"))
 
-df_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+df_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
 df <- 
   read_csv(df_fp) %>%
   mutate(
@@ -78,8 +78,8 @@ names_asqt3_new <-
 
 asqt3_clean <-
   asqt3 %>%
-  rename_at(vars(all_of(names_asqt3_old)), ~names_asqt3_new) %>%
-  mutate(
+  dplyr::rename_with(all_of(names_asqt3_old), .fn = ~ names_asqt3_new) %>%
+  dplyr::mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%
   dplyr::select(-asq_date)
@@ -97,7 +97,7 @@ names_asqt4_new <-
 
 asqt4_clean <-
   asqt4 %>%
-  rename_at(vars(all_of(names_asqt4_old)), ~names_asqt4_new) %>%
+  dplyr::rename_with(all_of(names_asqt4_old), .fn = ~ names_asqt4_new) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%
@@ -173,7 +173,7 @@ cmept4 <-
     ) %>%
   dplyr::select(ELS_ID, starts_with("cmep_"))
 
-df_cmep_fp <- "~/Dropbox/JSK_SC/_scripts/3_aim1/pub_ema_act_merged.csv"
+df_cmep_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
 df_cmep <- 
   read_csv(df_fp) %>%
   mutate(
@@ -198,7 +198,7 @@ names_cmept3_new <-
 
 cmept3_clean <-
   cmept3 %>%
-  rename_at(vars(all_of(names_cmept3_old)), ~names_cmept3_new) %>%
+  rename_with(all_of(names_cmept3_old), .fn = ~ names_cmept3_new) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%
@@ -217,7 +217,7 @@ names_cmept4_new <-
 
 cmept4_clean <-
   cmept4 %>%
-  rename_at(vars(all_of(names_cmept4_old)), ~names_cmept4_new) %>%
+  rename_with(all_of(names_cmept4_old), .fn = ~ names_cmept4_new) %>%
   mutate(
     ELS_ID = factor(ELS_ID)
   ) %>%

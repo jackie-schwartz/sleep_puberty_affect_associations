@@ -1,7 +1,7 @@
 ---
-title: "AHC_daily_ema_sleep_and_puberty_supplementary"
+title: "AHC_daily_ema_sleep_and_puberty"
 author: "Jackie Kirshenbaum"
-date: "4/12/2022"
+date: "7/25/2022"
 output: 
   html_document:
     toc: true
@@ -9,7 +9,7 @@ output:
     number_sections: true
 ---
 
-> This script analyzes all participants in high school + post-highschool 
+>  This script analyzes adolescents only in grade school (before transition to college)
 
 # Load Libraries
 ```{r, message=FALSE}
@@ -30,11 +30,11 @@ library(lmerTest)
 ```{r,message=FALSE, filepaths}
 
 # full AHC sample with pubertal and demographic info
-pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/3_aim1/pub_ema_act_merged.csv"
+pub_demo_act_ema_comb_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts_revised/3_aim1/pub_ema_act_merged.csv"
 
 ahc_subj_df <-
   read_csv(pub_demo_act_ema_comb_fp) %>%
-  mutate(ELS_ID = factor(ELS_ID)) %>%
+  dplyr::mutate(ELS_ID = factor(ELS_ID)) %>%
   as_tibble() %>%
   dplyr::select(-contains("act"))
 
@@ -65,6 +65,8 @@ options(scipen = 999, digits = 5)
 ```{r}
 # outliers: outside 1.5 times the interquartile range above the upper quartile and below the lower quartile (Q1 - 1.5 * IQR or Q3 + 1.5 * IQR).
 boxplot.stats(ahc_subj_df$dailysleep_sat_mean)$out # 0 outliers
+
+write_csv(ahc_subj_df, "ahc_full_samp.csv")
 ```
 
 ## centering based on this sample
@@ -72,7 +74,8 @@ I standardized tanner stage, age at tanner assessment, and bmi within each sex
 ```{r}
 ahc_subj_cent <-
   ahc_subj_df %>%
-  mutate(
+  dplyr::filter(high_school == "1") %>% 
+  dplyr::mutate(
     Sex = factor(sex),
     COVID = factor(COVID),
     mw_dailysleep_sat_z = as.numeric(scale(dailysleep_sat_mean)),
@@ -83,13 +86,23 @@ ahc_subj_cent <-
     ASQ_total_z = as.numeric(scale(ASQ_total)),
     sleep_rr_z = as.numeric(scale(sleep_rr))
     ) %>%
-  group_by(Sex) %>%
-  mutate(
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
     tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    tanner_average_t1_z = as.numeric(scale(tanner_average.T1)),
     BMI_ahc_z = as.numeric(scale(BMI_ahc)),
-    Age_ahc_z = as.numeric(scale(Age_ahc))
+    Age_ahc_z = as.numeric(scale(Age_ahc)),
+    Age.T1_z = as.numeric(scale(Age.T1))
   ) %>%
-  ungroup()
+  dplyr::ungroup()
+
+# creating relative pubertal stage
+rel_pub_mod <- lm(scale(tanner_average_ahc_z) ~ scale(Age_ahc_z), data = ahc_subj_cent)
+summary(rel_pub_mod)
+ahc_subj_cent <-
+  ahc_subj_cent %>% 
+  add_residuals(rel_pub_mod, var = "rel_pub_stg")
+
 ```
 
 ## Average RR
@@ -97,34 +110,34 @@ ahc_subj_cent <-
 ```{r}
 summary(ahc_subj_cent$sleep_rr)
   #  Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-  #  0.214   0.429   0.714   0.665   0.929   1.000 
+  #  0.357   0.500   0.786   0.726   0.929   1.000 
 ```
 ### NAs for cmep and stress
 
 ```{r}
-sum(is.na(ahc_subj_cent$cmep_total)) # 5
-sum(is.na(ahc_subj_cent$ASQ_total)) # 2
+sum(is.na(ahc_subj_cent$cmep_total)) # 3
+sum(is.na(ahc_subj_cent$ASQ_total)) # 1
 ```
 
 ## Testing potential covariates: asociations with sleep satisfaction/restfulness
 
 ```{r}
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$BMI_ahc) # not sig
-# r=-0.041526, p=0.72
+# r=-0.052372, p=0.68
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$Household_Income_ahc) #not sig
-# r=0.13752, p=0.21
+# r=0.16577, p=0.17
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$sleep_rr) # not sig
-# r=0.012469, p=0.91
+# r=0.062011, p=0.6
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$sumsev_type_t1) # not sig
-# r=-0.10489, p=0.33
+# r=-0.17514, p=0.14
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$ASQ_total) # sig
-# r=-0.28032, p=0.0085
+# r=-0.32728, p=0.0047
 cor.test(ahc_subj_cent$dailysleep_sat_mean, ahc_subj_cent$cmep_total) # sig
-# r=0.37248, p=0.00048
+# r=0.33684, p=0.0041
 summary(lm(mw_dailysleep_sat_z ~ Sex, data = ahc_subj_cent)) # not sig 
-# B=-0.204, p=.36 
+# B=-0.214, p=0.39 
 summary(lm(mw_dailysleep_sat_z ~ COVID, data = ahc_subj_cent)) # not sig 
-# B=-0.0541, p=0.81 
+# B=-0.0888, p=0.71 
 ```
 
 ## extra libraries
@@ -140,15 +153,16 @@ library(sjPlot)
 ## Association between pubertal stage score and sleep sat
 
 ```{r}
+# tanner stage
 pubsleep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_cent)
 summary(gvlma(pubsleep))
 summary(pubsleep)
 pubsleepplot <- gvlma(pubsleep)
 plot.gvlma(pubsleepplot)
 
-# negative association between relative pubertal stage and sleep sat
-# (B=-0.276131635114858220, p=0.0092)
 
+# negative association between tanner stage and sleep sat
+# (B=-0.326334393457243466, p=0.0048)
 pubsleep_int <- summary(pubsleep)$coefficients[1,1]
 pubsleep_slp <- summary(pubsleep)$coefficients[2,1]
 # CI
@@ -156,13 +170,13 @@ ci_pubsleep = Boot(pubsleep, coef,
 method='case', R=1000)
 boot_confint_ci_pubsleep <- confint(ci_pubsleep, type='norm')
 #                       2.5 %    97.5 %
-# tanner_average_ahc_z -0.46490 -0.084348
+# tanner_average_ahc_z -0.52504 -0.11717
 
-# Bayes Factor
+
+# Bayes Factor Tanner Stage
 bayes_pub <- regressionBF(
   formula = mw_dailysleep_sat_z ~ tanner_average_ahc_z, data = ahc_subj_cent
-) #  4.6799 
-
+) # 8.1767 
 
 ```
 
@@ -176,7 +190,7 @@ agesleepplot <- gvlma(agesleep)
 plot.gvlma(agesleepplot)
 
 # no association btwn age and sleep
-# (B=-0.0935154500193696170, p=0.39)
+# (B=-0.1409, p=0.24)
 
 agesleep_int <- summary(agesleep)$coefficients[1,1]
 agesleep_slp <- summary(agesleep)$coefficients[2,1]
@@ -185,12 +199,12 @@ ci_agesleep = Boot(agesleep, coef,
 method='case', R=1000)
 boot_confint_ci_agesleep <- confint(ci_agesleep, type='norm')
 #               2.5 %    97.5 %
-# Age_ahc_z   -0.29517 0.13707
+# Age_ahc_z    -0.35624 0.11227
 
 # Bayes Factor
 bayes_age <- regressionBF(
   formula = mw_dailysleep_sat_z ~ Age_ahc_z, data = ahc_subj_cent
-) # 0.30962 
+) # 0.39582 
 
 ```
 ### Plotting Tanner vs Age
@@ -232,6 +246,7 @@ p1 <-
         axis.title.x = element_text(size = 9),
         axis.title.y = element_text(size = 9))
 p1
+ggsave("dev_stage_daily_sleep_sat.tiff", p1, width = 6, height = 5)
 ```
 
 ### Controlling for perceived stress severity and circadian preference
@@ -240,7 +255,8 @@ ahc_cent_bf <-
   ahc_subj_cent %>%
   drop_na(ASQ_total) %>%
   drop_na(cmep_total)
-pubasqcmep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + ASQ_total_z + cmep_z, data = ahc_cent_bf)
+
+pubasqcmep <- lm(mw_dailysleep_sat_z ~ tanner_average_ahc_z + cmep_z + ASQ_total_z, data = ahc_cent_bf)
 summary(gvlma(pubasqcmep))
 summary(pubasqcmep)
 pubasqcmepplot <- gvlma(pubasqcmep)
@@ -248,17 +264,14 @@ plot.gvlma(pubasqcmepplot)
 ci_pubasqcmep = Boot(pubasqcmep, coef,
 method='case', R=1000)
 ci_relpubasqcmepboot <- confint(ci_pubasqcmep, type='norm')
-#                         2.5%      97.5%
-# tanner_average_ahc_z -0.387826 -0.0029039
-# ASQ_total_z          -0.339137  0.0681323
-# cmep_z                0.095139  0.4844219
-# Bayes Factor
+#                          2.5 %    97.5 %
+# (Intercept)          -0.239401  0.20653516
+# tanner_average_ahc_z -0.4142701 -0.001207
+# cmep_z               -0.0021835  0.419004
+# ASQ_total_z          -0.4145017  0.015578
 regressionBF(
   formula = mw_dailysleep_sat_z ~ tanner_average_ahc_z + ASQ_total_z + cmep_z, data = ahc_cent_bf
-) 
-# tanner: 4.7623
-# ASQ_total_z: 4.6372 ±0%
-# cmep_z 56.152 ±0%
+) # tanner_average_ahc_z pub: 6.8191, asq: 7.2692 , cmep: 9.4864 
 
 ```
 
@@ -301,60 +314,137 @@ ahc_subj_df_rem_cent_hrs <-
   dplyr::group_by(Sex) %>%
   dplyr::mutate(
     tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    tanner_average_t1_z = as.numeric(scale(tanner_average.T1)),
     BMI_ahc_z = as.numeric(scale(BMI_ahc)),
-    Age_ahc_z = as.numeric(scale(Age_ahc))
+    Age_ahc_z = as.numeric(scale(Age_ahc)),
+    Age.T1_z = as.numeric(scale(Age.T1))
   ) %>%
   ungroup()
+
 ```
 
 ## Testing potential covariates: asociations with sleep duration
 
 ```{r}
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$BMI_ahc_z) # not sig
-# r=-0.10727, p=0.35
+# r=-0.098023, p=0.44
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$Household_Income_ahc_z) # not sig
-# r=0.17024, p=0.12
+# r=0.18155, p=0.13
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$sumsev_type_z) # sig
-# r=-0.28631 , p=0.0072
+# r=-0.27706 , p=0.017
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$ASQ_total) # not sig
-# r=-0.21032, p=0.052
+# r=-0.204, p=0.081
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$cmep_total) # sig
-# r=0.23832, p=0.03
+# r=0.22077, p=0.062
 cor.test(ahc_subj_df_rem_cent_hrs$mw_dailysleepshrs_z, ahc_subj_df_rem_cent_hrs$sleep_rr) # sig
-# r = 0.24212, p=0.023
+# r = 0.16078, p=0.17
 summary(lm(mw_dailysleepshrs_z ~ Sex, data = ahc_subj_df_rem_cent_hrs)) # marginal
-# B=0.387, p=0.083 
+# B=0.402, p=0.10 
 summary(lm(mw_dailysleepshrs_z ~ COVID, data = ahc_subj_df_rem_cent_hrs)) # marginal
-# B=0.397, p=0.073 
+# B=0.381, p=0.11 
 ```
 
 ## Association between pubertal stage score and sleep dur
 
 ```{r}
+# Tanner
 pubsleepdur <- lm(mw_dailysleepshrs_z ~ tanner_average_ahc_z, data = ahc_subj_df_rem_cent_hrs)
 summary(gvlma(pubsleepdur))
 summary(pubsleepdur)
 pubsleepdurplot <- gvlma(pubsleepdur)
 plot.gvlma(pubsleepdurplot)
 
+# Tempo
+temposleepdur <- lm(mw_dailysleepshrs_z ~ tanner_average_t1_z, data = ahc_subj_df_rem_cent_hrs)
+summary(gvlma(temposleepdur))
+
 # negative association between relative pubertal stage and sleep dur
-# (B=-0.106076474916116201, p=0.33)
+# (B=-0.114449697228927144, p=0.33)
+
 # CI
 ci_pubsleepdur = Boot(pubsleepdur, coef,
 method='case', R=1000)
 boot_confint_ci_pubsleepdur <- confint(ci_pubsleepdur, type='norm')
 #                       2.5 %    97.5 %
-# tanner_average_ahc_z -0.31940 0.10287
+# tanner_average_ahc_z -0.33389 0.10840
 
 # Bayes Factor
 bayes_pubsleepdur <- regressionBF(
   formula = mw_dailysleepshrs_z ~ tanner_average_ahc_z, data = ahc_subj_df_rem_cent_hrs
-) # 0.34074 
+) # 0.36059 
 
 
 ```
 
+
+##### LONG FORM ######
+
+```{r}
+# full AHC sample with pubertal and demographic info LONG FORM
+pub_demo_act_ema_comb_long_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts_revised/3_aim1/pub_ema_act_merged_long.csv"
+
+ahc_long_df <-
+  read_csv(pub_demo_act_ema_comb_long_fp) %>%
+  dplyr::mutate(
+    ELS_ID = factor(ELS_ID),
+    high_school = factor(high_school)
+    ) %>%
+  as_tibble()
+```
+
+#### centering based on this sample
+I standardized tanner stage, age at tanner assessment, and bmi within each sex
+```{r}
+ahc_long_df_cent <-
+  ahc_long_df %>%
+  dplyr::filter(high_school == "1") %>% # results hold filtering for those less than 19
+  dplyr::group_by(ELS_ID) %>%
+  dplyr::mutate(
+    Sex = factor(sex),
+    mw_dailysleep_sat_z = as.numeric(scale(DailySleep_satisfaction)),
+    mw_dailysleepshrs_z = as.numeric(scale(DailySleep_hrs_rec))
+    ) %>%
+  dplyr::group_by(Sex) %>%
+  dplyr::mutate(
+    tanner_average_ahc_z = as.numeric(scale(tanner_average_ahc)), # standardize within each sex
+    BMI_ahc_z = as.numeric(scale(BMI_ahc)),
+    Age_ahc_z = as.numeric(scale(Age_ahc))
+  ) %>%
+  dplyr::ungroup() %>%
+  dplyr::mutate(
+    Household_Income_ahc_z = as.numeric(scale(Household_Income_ahc)),
+    sumsev_type_z = as.numeric(scale(sumsev_type_t1)),
+    ASQ_total_z = as.numeric(scale(ASQ_total)),
+    cmep_z = as.numeric(scale(cmep_total)),
+    sleep_rr_z = as.numeric(scale(sleep_rr)),
+    respnum_z = as.numeric(scale(respnumber))
+  )
+```
+
+#### Examining the effect of Tanner stage on daily sleep satisfaction in long form
+
+```{r}
+
+sleepsat_long <- 
+  lmer(
+    DailySleep_satisfaction ~ 
+      tanner_average_ahc_z  + respnum_z + ASQ_total_z + cmep_z +
+         (1 + respnum_z | ELS_ID), 
+       data = ahc_long_df_cent
+  )
+summary(sleepsat_long)
+
+sleepsat_long_age <- 
+  lmer(
+    DailySleep_satisfaction ~ 
+      Age_ahc_z  + respnum_z + ASQ_total_z + cmep_z +
+         (1 + respnum_z | ELS_ID), 
+       data = ahc_long_df_cent
+  )
+summary(sleepsat_long_age)
+```
+
 # Summary
 
-> Results are consistent with main analysis. Effect of pubertal stage in relation to daily sleep satisfaction becomes marginal when controlling for circadian pref and perceived stress severity. 
+> Pubertal stage, but not age, is associated with daily sleep satisfaction. Covariate of circadian preference was also still associated with sleep satisfaction; adolescent stress was not associated with daily sleep satisfaction anymore (holds in long form too). Pubertal stage was not associated with daily sleep duration. 
 

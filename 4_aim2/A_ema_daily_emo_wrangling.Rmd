@@ -27,7 +27,7 @@ library(psych)
 # Reading in mw EMO long form data
 
 ```{r,message=FALSE, filepaths}
-mw_emo_long_fp <- "~/Dropbox/JSK_SC/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv"
+mw_emo_long_fp <- "~/Dropbox/JSK_SC/1_sleep_puberty/_scripts/2_at-home_wrangling/mw_daily_emo_longform.csv"
 mw_mood <-read_csv(mw_emo_long_fp) %>%
   mutate(ELS_ID = factor(ELS_ID)) %>%
   as_tibble()
@@ -105,7 +105,7 @@ emamerge_mat
 pval = cor.mtest(emamerge_mat, conf.level = 0.95)
 ema_filter_matpcor <- cor(emamerge_mat)
 
-png("emacorrplot.png")
+tiff("emacorrplot.tiff")
 corrplot(ema_filter_matpcor, p.mat = pval$p, method = 'color', col = colorRampPalette(c("blue", "white", "darkorange"))(100), diag = FALSE, type = 'lower',
          sig.level = c(0.001, 0.01, 0.04), pch.cex = 0.9, tl.col = "black",
          insig = 'label_sig',pch.col = 'grey40', order = 'hclust')
